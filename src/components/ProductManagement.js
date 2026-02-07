@@ -1,30 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
   Box,
   Typography,
   Grid,
-  Alert,
-  Chip,
+  Button,
+  IconButton,
+  Tooltip,
+  Skeleton,
+  Paper,
+  TextField,
+  InputAdornment,
+  LinearProgress,
+  alpha,
+  useMediaQuery,
+  useTheme,
+  Fade,
   Snackbar,
+  Alert,
 } from '@mui/material';
-import { Add, Edit, Delete, Search } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Inventory as InventoryIcon,
+  Refresh as RefreshIcon,
+  ImportExport as ImportExportIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
 import { supabase } from '../config/supabase';
+import ProductList from './ProductList';
+import ProductForm from './ProductForm';
+import StatsCards from './StatsCards';
 
 const ProductManagement = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [products, setProducts] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,47 +45,82 @@ const ProductManagement = () => {
     description: '',
   });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedRow, setExpandedRow] = useState(null);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   
-  // Snackbar states for notifications
+  const [stats, setStats] = useState({
+    total: 0,
+    withDescription: 0,
+    recentlyAdded: 0,
+  });
+  
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
-    severity: 'success', // 'success', 'error', 'warning', 'info'
+    severity: 'success',
+    action: null,
   });
 
- useEffect(() => {
-  fetchProducts();
-}, [fetchProducts]); // Add fetchProducts here
+  const showSnackbar = useCallback((message, severity = 'success', action = null) => {
+    setSnackbar({
+      open: true,
+      message,
+      severity,
+      action,
+    });
+  }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('Error fetching products:', error);
-        showSnackbar('Error loading products', 'error');
-      } else {
-        setProducts(data || []);
+        throw error;
       }
+      
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const productsWithStats = (data || []).map((product) => ({
+        ...product,
+        isRecent: new Date(product.created_at) > weekAgo,
+      }));
+      
+      const stats = {
+        total: productsWithStats.length,
+        withDescription: productsWithStats.filter(p => p.description).length,
+        recentlyAdded: productsWithStats.filter(p => p.isRecent).length,
+      };
+      
+      setProducts(productsWithStats);
+      setStats(stats);
+      
     } catch (error) {
-      console.error('Error:', error);
-      showSnackbar('Error loading products', 'error');
+      console.error('Error fetching products:', error);
+      showSnackbar('Error loading products. Please try again.', 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [showSnackbar]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   const generateSerialNumber = () => {
-    return `TZ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `TZ-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
   };
 
   const handleSubmit = async () => {
-    if (!newProduct.name) {
+    if (!newProduct.name || !newProduct.name.trim()) {
       setError('Product name is required');
       return;
     }
@@ -84,10 +129,10 @@ const ProductManagement = () => {
       const productData = {
         name: newProduct.name.trim(),
         description: newProduct.description?.trim() || '',
+        updated_at: new Date().toISOString(),
       };
 
       if (editingProduct) {
-        // Update existing product
         const { error } = await supabase
           .from('products')
           .update(productData)
@@ -95,11 +140,8 @@ const ProductManagement = () => {
         
         if (error) throw error;
         
-        fetchProducts();
-        handleCloseDialog();
         showSnackbar('Product updated successfully!', 'success');
       } else {
-        // Add new product
         productData.serial_number = generateSerialNumber();
         
         const { error } = await supabase
@@ -108,60 +150,56 @@ const ProductManagement = () => {
         
         if (error) throw error;
         
-        fetchProducts();
-        handleCloseDialog();
         showSnackbar('Product added successfully!', 'success');
       }
+      
+      fetchProducts();
+      handleCloseDialog();
+      
     } catch (error) {
       console.error('Error saving product:', error);
-      showSnackbar('Error saving product. Please try again.', 'error');
+      showSnackbar(error.message || 'Error saving product. Please try again.', 'error');
     }
   };
 
-  const handleDelete = async (id) => {
-    // Show confirmation dialog
-    setSnackbar({
-      open: true,
-      message: 'Are you sure you want to delete this product?',
-      severity: 'warning',
-      action: (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            color="inherit" 
-            size="small" 
-            onClick={() => {
-              setSnackbar({ ...snackbar, open: false });
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            color="error" 
-            size="small" 
-            variant="contained"
-            onClick={async () => {
-              setSnackbar({ ...snackbar, open: false });
-              try {
-                const { error } = await supabase
-                  .from('products')
-                  .delete()
-                  .eq('id', id);
-                
-                if (error) throw error;
-                
-                fetchProducts();
-                showSnackbar('Product deleted successfully!', 'success');
-              } catch (error) {
-                console.error('Error deleting product:', error);
-                showSnackbar('Error deleting product. Please try again.', 'error');
-              }
-            }}
-          >
-            Delete
-          </Button>
-        </Box>
-      ),
-    });
+  const handleDelete = async (product) => {
+    showSnackbar(
+      `Delete ${product.name}? This action cannot be undone.`,
+      'warning',
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button 
+          color="inherit" 
+          size="small" 
+          variant="outlined"
+          onClick={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          Cancel
+        </Button>
+        <Button 
+          color="error" 
+          size="small" 
+          variant="contained"
+          onClick={async () => {
+            try {
+              const { error } = await supabase
+                .from('products')
+                .delete()
+                .eq('id', product.id);
+              
+              if (error) throw error;
+              
+              fetchProducts();
+              showSnackbar('Product deleted successfully!', 'success');
+            } catch (error) {
+              console.error('Error deleting product:', error);
+              showSnackbar('Error deleting product. Please try again.', 'error');
+            }
+          }}
+        >
+          Delete
+        </Button>
+      </Box>
+    );
   };
 
   const handleEdit = (product) => {
@@ -181,312 +219,316 @@ const ProductManagement = () => {
     setError('');
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({
-      open: true,
-      message,
-      severity,
-    });
+  const handleRefresh = () => {
+    fetchProducts();
   };
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
+  const handleExport = () => {
+    showSnackbar('Export feature coming soon!', 'info');
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.serial_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const toggleRowExpansion = (productId) => {
+    setExpandedRow(expandedRow === productId ? null : productId);
+  };
+
+  const filteredProducts = products.filter(product => {
+    if (!product) return false;
+    
+    const search = searchTerm.toLowerCase();
+    return (
+      product.name?.toLowerCase().includes(search) ||
+      product.serial_number?.toLowerCase().includes(search) ||
+      product.description?.toLowerCase().includes(search)
+    );
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const paginatedProducts = filteredProducts.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
   );
 
-  return (
-    <Box>
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={8}>
-          <Typography variant="h5" gutterBottom>
-            Scrap Products
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Add and manage scrap products. These products will appear in customer sheets for selection.
-          </Typography>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField
-              fullWidth
-              placeholder="Search products by name, serial, or description..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: <Search sx={{ color: 'action.active', mr: 1 }} />,
-              }}
-              size="small"
-              sx={{ 
-                '& .MuiOutlinedInput-root': { 
-                  borderRadius: 2 
-                } 
-              }}
-            />
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => setOpenDialog(true)}
+  if (loading) {
+    return (
+      <Box sx={{ p: isMobile ? 2 : 3 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Grid container spacing={2}>
+              {[1, 2, 3].map((item) => (
+                <Grid item xs={6} sm={4} key={item}>
+                  <Skeleton 
+                    variant="rectangular" 
+                    height={120} 
+                    sx={{ borderRadius: 3 }}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Skeleton 
+              variant="rectangular" 
+              height={56} 
               sx={{ borderRadius: 2 }}
-            >
-              Add
-            </Button>
-          </Box>
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            {[...Array(5)].map((_, index) => (
+              <Skeleton
+                key={index}
+                variant="rectangular"
+                height={68}
+                sx={{ 
+                  borderRadius: 2,
+                  mb: 1,
+                  width: '100%'
+                }}
+              />
+            ))}
+          </Grid>
         </Grid>
-      </Grid>
+      </Box>
+    );
+  }
 
-      {loading ? (
-        <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-          <Typography color="textSecondary">Loading products...</Typography>
-        </Paper>
-      ) : (
-        <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: 'secondary.50' }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Serial No.</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Product Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-                  <TableCell sx={{ fontWeight: 600, width: '120px' }}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredProducts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" color="textSecondary" gutterBottom>
-                          {products.length === 0 ? '📦 No Products Yet' : '🔍 No Results Found'}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {products.length === 0 
-                            ? 'Add your first scrap product to get started!' 
-                            : 'Try adjusting your search terms'}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <TableRow 
-                      key={product.id} 
-                      hover
-                      sx={{ 
-                        '&:hover': { backgroundColor: 'action.hover' },
-                        '&:last-child td': { borderBottom: 0 }
-                      }}
-                    >
-                      <TableCell>
-                        {product.serial_number ? (
-                          <Chip 
-                            label={product.serial_number} 
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                            sx={{ 
-                              fontWeight: 500,
-                              borderRadius: 1,
-                              borderWidth: 2
-                            }}
-                          />
-                        ) : (
-                          <Typography variant="body2" color="textSecondary">N/A</Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="subtitle2" fontWeight="bold">
-                          {product.name || 'Unnamed Product'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="textSecondary">
-                          {product.description || 'No description'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <IconButton
-                            color="primary"
-                            onClick={() => handleEdit(product)}
-                            size="small"
-                            title="Edit product"
-                            sx={{ 
-                              border: '1px solid',
-                              borderColor: 'primary.main',
-                              '&:hover': { 
-                                backgroundColor: 'primary.light' 
-                              }
-                            }}
-                          >
-                            <Edit fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            color="error"
-                            onClick={() => handleDelete(product.id)}
-                            size="small"
-                            title="Delete product"
-                            sx={{ 
-                              border: '1px solid',
-                              borderColor: 'error.main',
-                              '&:hover': { 
-                                backgroundColor: 'error.light' 
-                              }
-                            }}
-                          >
-                            <Delete fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
+  return (
+    <Fade in={!loading}>
+      <Box sx={{ 
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        p: isMobile ? 2 : 3,
+      }}>
+        {/* Header Section */}
+        <Box sx={{ mb: 4 }}>
+          <Grid container alignItems="center" justifyContent="space-between" spacing={2}>
+            <Grid item xs={12} md="auto">
+              <Typography 
+                variant={isMobile ? "h5" : "h4"} 
+                fontWeight={700}
+                color="secondary"
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5
+                }}
+              >
+                <InventoryIcon fontSize={isMobile ? "medium" : "large"} />
+                Product Management
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+                Manage scrap products for customer transactions
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12} md="auto">
+              <Box sx={{ 
+                display: 'flex', 
+                gap: isMobile ? 1 : 2,
+                flexWrap: 'wrap'
+              }}>
+                <Tooltip title="Refresh">
+                  <IconButton
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    sx={{ 
+                      bgcolor: 'background.paper',
+                      border: `1px solid ${alpha(theme.palette.secondary.main, 0.2)}`,
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.secondary.main, 0.04),
+                      }
+                    }}
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Export Data">
+                  <IconButton
+                    onClick={handleExport}
+                    sx={{ 
+                      bgcolor: 'background.paper',
+                      border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.success.main, 0.04),
+                      }
+                    }}
+                  >
+                    <ImportExportIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<AddIcon />}
+                  onClick={() => setOpenDialog(true)}
+                  sx={{ 
+                    borderRadius: 3,
+                    px: 3,
+                    py: 1,
+                    fontWeight: 600,
+                    boxShadow: theme.shadows[3],
+                    '&:hover': {
+                      boxShadow: theme.shadows[6],
+                    }
+                  }}
+                >
+                  {isMobile ? 'Add' : 'Add Product'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
 
-      <Dialog 
-        open={openDialog} 
-        onClose={handleCloseDialog} 
-        maxWidth="sm" 
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}
-      >
-        <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h6" fontWeight={600}>
-            {editingProduct ? 'Edit Product' : 'Add New Scrap Product'}
-          </Typography>
-          <Typography variant="caption" color="textSecondary">
-            {editingProduct ? `Editing: ${editingProduct.name}` : 'Add a new scrap product'}
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert 
-              severity="error" 
+        {/* Stats Cards */}
+        <StatsCards stats={stats} isMobile={isMobile} />
+
+        {/* Search Section */}
+        <Paper 
+          elevation={0}
+          sx={{ 
+            p: isMobile ? 2 : 3,
+            mb: 3,
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          }}
+        >
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                placeholder="Search products by name, serial, or description..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                variant="outlined"
+                size={isMobile ? "small" : "medium"}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="action" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchTerm && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={() => setSearchTerm('')}
+                      >
+                        <Typography variant="caption" color="textSecondary">
+                          Clear
+                        </Typography>
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                  sx: { borderRadius: 2 }
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 2,
+                justifyContent: isMobile ? 'space-between' : 'flex-end',
+                flexWrap: 'wrap'
+              }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setSearchTerm('')}
+                  disabled={!searchTerm}
+                  sx={{ borderRadius: 2 }}
+                >
+                  Clear Search
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+          
+          {refreshing && (
+            <LinearProgress 
               sx={{ 
-                mb: 2, 
+                mt: 2,
                 borderRadius: 2,
-                '& .MuiAlert-icon': {
-                  alignItems: 'center'
-                }
-              }}
-            >
-              {error}
-            </Alert>
-          )}
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Product Name *"
-            fullWidth
-            value={newProduct.name}
-            onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-            required
-            sx={{ mb: 2 }}
-            helperText="Enter the name of the scrap product"
-            InputProps={{ 
-              sx: { borderRadius: 2 },
-              endAdornment: (
-                <Typography variant="caption" color="textSecondary">
-                  Required
-                </Typography>
-              )
-            }}
-          />
-          <TextField
-            margin="dense"
-            label="Description (Optional)"
-            fullWidth
-            multiline
-            rows={3}
-            value={newProduct.description}
-            onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-            helperText="Optional description of the scrap product"
-            InputProps={{ 
-              sx: { borderRadius: 2 },
-              endAdornment: (
-                <Typography variant="caption" color="textSecondary">
-                  Optional
-                </Typography>
-              )
-            }}
-          />
-          {editingProduct && (
-            <TextField
-              margin="dense"
-              label="Serial Number"
-              fullWidth
-              value={newProduct.serial_number}
-              disabled
-              sx={{ mt: 2 }}
-              helperText="Auto-generated serial number"
-              InputProps={{ sx: { borderRadius: 2 } }}
+                height: 3,
+                bgcolor: 'secondary.light'
+              }} 
             />
           )}
-        </DialogContent>
-        <DialogActions sx={{ p: 3, pt: 0 }}>
-          <Button 
-            onClick={handleCloseDialog}
-            sx={{ 
-              borderRadius: 2, 
-              textTransform: 'none',
-              px: 3,
-              py: 1
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSubmit} 
-            variant="contained"
-            sx={{ 
-              borderRadius: 2, 
-              textTransform: 'none', 
-              fontWeight: 600,
-              px: 3,
-              py: 1
-            }}
-          >
-            {editingProduct ? 'Update Product' : 'Add Product'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Paper>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={snackbar.severity === 'warning' ? null : 6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          variant="filled"
-          sx={{ 
-            width: '100%',
-            borderRadius: 2,
-            alignItems: 'center',
-            '& .MuiAlert-message': {
-              flexGrow: 1
-            }
+        {/* Product List Component */}
+        <ProductList
+          products={paginatedProducts}
+          filteredProducts={filteredProducts}
+          isMobile={isMobile}
+          isTablet={isTablet}
+          expandedRow={expandedRow}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          searchTerm={searchTerm}
+          theme={theme}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onToggleExpand={toggleRowExpansion}
+          onChangePage={handleChangePage}
+          onChangeRowsPerPage={handleChangeRowsPerPage}
+          onAddProduct={() => setOpenDialog(true)}
+        />
+
+        {/* Product Form Dialog */}
+        <ProductForm
+          open={openDialog}
+          onClose={handleCloseDialog}
+          editingProduct={editingProduct}
+          newProduct={newProduct}
+          error={error}
+          isMobile={isMobile}
+          theme={theme}
+          onChange={setNewProduct}
+          onSubmit={handleSubmit}
+          onErrorChange={setError}
+        />
+
+        {/* Snackbar Notifications */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={snackbar.severity === 'warning' ? null : 6000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ 
+            vertical: isMobile ? 'bottom' : 'bottom', 
+            horizontal: isMobile ? 'center' : 'right' 
           }}
-          action={snackbar.action}
+          TransitionComponent={Fade}
         >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+          <Alert
+            elevation={6}
+            variant="filled"
+            severity={snackbar.severity}
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            sx={{ 
+              borderRadius: 2,
+              alignItems: 'center',
+              width: '100%',
+              maxWidth: isMobile ? '90vw' : 400,
+            }}
+            action={snackbar.action}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Box>
+    </Fade>
   );
 };
 
