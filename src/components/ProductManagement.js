@@ -17,6 +17,8 @@ import {
   Fade,
   Snackbar,
   Alert,
+  Card,
+  CardContent,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -24,11 +26,11 @@ import {
   Refresh as RefreshIcon,
   ImportExport as ImportExportIcon,
   Search as SearchIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { supabase } from '../config/supabase';
 import ProductList from './ProductList';
 import ProductForm from './ProductForm';
-import StatsCards from './StatsCards';
 
 const ProductManagement = () => {
   const theme = useTheme();
@@ -40,7 +42,6 @@ const ProductManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
   const [newProduct, setNewProduct] = useState({
-    serial_number: '',
     name: '',
     description: '',
   });
@@ -53,8 +54,6 @@ const ProductManagement = () => {
   
   const [stats, setStats] = useState({
     total: 0,
-    withDescription: 0,
-    recentlyAdded: 0,
   });
   
   const [snackbar, setSnackbar] = useState({
@@ -85,21 +84,16 @@ const ProductManagement = () => {
         throw error;
       }
       
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      
-      const productsWithStats = (data || []).map((product) => ({
+      const productsWithSN = (data || []).map((product, index) => ({
         ...product,
-        isRecent: new Date(product.created_at) > weekAgo,
+        serialNumber: index + 1, // Simple serial number 1, 2, 3...
       }));
       
       const stats = {
-        total: productsWithStats.length,
-        withDescription: productsWithStats.filter(p => p.description).length,
-        recentlyAdded: productsWithStats.filter(p => p.isRecent).length,
+        total: productsWithSN.length,
       };
       
-      setProducts(productsWithStats);
+      setProducts(productsWithSN);
       setStats(stats);
       
     } catch (error) {
@@ -114,10 +108,6 @@ const ProductManagement = () => {
   useEffect(() => {
     fetchProducts();
   }, []);
-
-  const generateSerialNumber = () => {
-    return `TZ-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-  };
 
   const handleSubmit = async () => {
     if (!newProduct.name || !newProduct.name.trim()) {
@@ -142,8 +132,6 @@ const ProductManagement = () => {
         
         showSnackbar('Product updated successfully!', 'success');
       } else {
-        productData.serial_number = generateSerialNumber();
-        
         const { error } = await supabase
           .from('products')
           .insert([productData]);
@@ -205,7 +193,6 @@ const ProductManagement = () => {
   const handleEdit = (product) => {
     setEditingProduct(product);
     setNewProduct({
-      serial_number: product.serial_number || '',
       name: product.name || '',
       description: product.description || '',
     });
@@ -215,7 +202,7 @@ const ProductManagement = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingProduct(null);
-    setNewProduct({ serial_number: '', name: '', description: '' });
+    setNewProduct({ name: '', description: '' });
     setError('');
   };
 
@@ -246,8 +233,8 @@ const ProductManagement = () => {
     const search = searchTerm.toLowerCase();
     return (
       product.name?.toLowerCase().includes(search) ||
-      product.serial_number?.toLowerCase().includes(search) ||
-      product.description?.toLowerCase().includes(search)
+      product.description?.toLowerCase().includes(search) ||
+      product.serialNumber?.toString().includes(search)
     );
   }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -259,44 +246,39 @@ const ProductManagement = () => {
   if (loading) {
     return (
       <Box sx={{ p: isMobile ? 2 : 3 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Grid container spacing={2}>
-              {[1, 2, 3].map((item) => (
-                <Grid item xs={6} sm={4} key={item}>
-                  <Skeleton 
-                    variant="rectangular" 
-                    height={120} 
-                    sx={{ borderRadius: 3 }}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          </Grid>
-          
-          <Grid item xs={12}>
-            <Skeleton 
-              variant="rectangular" 
-              height={56} 
-              sx={{ borderRadius: 2 }}
+        {/* Header Skeleton */}
+        <Box sx={{ mb: 4 }}>
+          <Skeleton variant="rectangular" height={40} width="60%" sx={{ mb: 1, borderRadius: 2 }} />
+          <Skeleton variant="rectangular" height={20} width="40%" sx={{ borderRadius: 1 }} />
+        </Box>
+        
+        {/* Total Products Skeleton */}
+        <Box sx={{ mb: 3 }}>
+          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 3, mb: 2 }} />
+        </Box>
+        
+        {/* Search Bar Skeleton */}
+        <Skeleton 
+          variant="rectangular" 
+          height={56} 
+          sx={{ borderRadius: 2, mb: 3 }}
+        />
+        
+        {/* Table Skeletons */}
+        <Box sx={{ mb: 3 }}>
+          {[...Array(5)].map((_, index) => (
+            <Skeleton
+              key={index}
+              variant="rectangular"
+              height={68}
+              sx={{ 
+                borderRadius: 2,
+                mb: 1,
+                width: '100%'
+              }}
             />
-          </Grid>
-          
-          <Grid item xs={12}>
-            {[...Array(5)].map((_, index) => (
-              <Skeleton
-                key={index}
-                variant="rectangular"
-                height={68}
-                sx={{ 
-                  borderRadius: 2,
-                  mb: 1,
-                  width: '100%'
-                }}
-              />
-            ))}
-          </Grid>
-        </Grid>
+          ))}
+        </Box>
       </Box>
     );
   }
@@ -390,8 +372,52 @@ const ProductManagement = () => {
           </Grid>
         </Box>
 
-        {/* Stats Cards */}
-        <StatsCards stats={stats} isMobile={isMobile} />
+        {/* Total Products Card - Simple Version */}
+        <Box sx={{ mb: 3 }}>
+          <Card sx={{ 
+            borderRadius: 3,
+            bgcolor: 'secondary.main',
+            color: 'secondary.contrastText',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: theme.shadows[8],
+            }
+          }}>
+            <CardContent sx={{ 
+              p: isMobile ? 2 : 3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <Box>
+                <Typography 
+                  variant={isMobile ? "h3" : "h2"} 
+                  fontWeight={800}
+                  sx={{ 
+                    mb: 0.5,
+                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
+                  }}
+                >
+                  {stats.total}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "h6" : "h5"} 
+                  sx={{ 
+                    opacity: 0.9,
+                    fontWeight: 600,
+                  }}
+                >
+                  Total Products
+                </Typography>
+              </Box>
+              <PeopleIcon sx={{ 
+                fontSize: isMobile ? 60 : 80,
+                opacity: 0.8,
+              }} />
+            </CardContent>
+          </Card>
+        </Box>
 
         {/* Search Section */}
         <Paper 

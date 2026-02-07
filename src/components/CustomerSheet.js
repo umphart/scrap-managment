@@ -10,6 +10,7 @@ const CustomerSheet = ({ customer, onBack }) => {
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [openProductDialog, setOpenProductDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -51,25 +52,43 @@ const CustomerSheet = ({ customer, onBack }) => {
     }
   }, [customer.id, showSnackbar]);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
-
   const fetchProducts = useCallback(async () => {
     try {
+      setProductsLoading(true);
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .order('name');
       
-      if (!error && data) {
-        setProducts(data);
+      if (error) {
+        console.error('Error fetching products:', error);
+        showSnackbar('Error loading products', 'error');
+        return [];
+      } else {
+        setProducts(data || []);
+        return data || [];
       }
     } catch (error) {
       console.error('Error fetching products:', error);
+      showSnackbar('Error loading products', 'error');
+      return [];
+    } finally {
+      setProductsLoading(false);
     }
-  }, []);
+  }, [showSnackbar]);
 
+  useEffect(() => {
+    fetchTransactions();
+    fetchProducts();
+  }, [fetchTransactions, fetchProducts]);
+
+  const handleAddProductDialogOpen = async () => {
+    // Ensure products are loaded before opening dialog
+    if (products.length === 0) {
+      await fetchProducts();
+    }
+    setOpenProductDialog(true);
+  };
 
   const handleAddProduct = async (transactionData) => {
     try {
@@ -103,7 +122,6 @@ const CustomerSheet = ({ customer, onBack }) => {
   };
 
   const handleDeleteTransaction = async (id) => {
-    // Show confirmation snackbar instead of browser alert
     setSnackbar({
       open: true,
       message: 'Are you sure you want to delete this transaction?',
@@ -145,7 +163,6 @@ const CustomerSheet = ({ customer, onBack }) => {
       ),
     });
   };
-
 
   const handleCloseSnackbar = (event, reason) => {
     if (reason === 'clickaway') return;
@@ -261,7 +278,7 @@ const CustomerSheet = ({ customer, onBack }) => {
         customer={customer}
         onBack={onBack}
         onPrint={handlePrint}
-        onAddProduct={() => setOpenProductDialog(true)}
+        onAddProduct={handleAddProductDialogOpen}
         transactions={transactions}
       />
 
@@ -287,8 +304,10 @@ const CustomerSheet = ({ customer, onBack }) => {
         open={openProductDialog}
         onClose={() => setOpenProductDialog(false)}
         products={products}
+        productsLoading={productsLoading}
         onAddProduct={handleAddProduct}
         customer={customer}
+        onRefreshProducts={fetchProducts}
       />
 
       {/* Snackbar for notifications */}

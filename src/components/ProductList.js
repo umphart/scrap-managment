@@ -25,11 +25,11 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  QrCode as QrCodeIcon,
   Description as DescriptionIcon,
   Inventory as InventoryIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
+  FilterList as FilterListIcon,
 } from '@mui/icons-material';
 
 const ProductList = ({
@@ -156,14 +156,14 @@ const MobileProductCard = ({ product, expandedRow, onToggleExpand, onEdit, onDel
               mr: 2,
             }}
           >
-            {product.name.charAt(0).toUpperCase()}
+            {product.serialNumber}
           </Avatar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="subtitle1" fontWeight={600}>
               {product.name}
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              ID: #{product.serial_number?.slice(0, 8)}
+              Serial #: {product.serialNumber}
             </Typography>
           </Box>
           <IconButton
@@ -179,8 +179,8 @@ const MobileProductCard = ({ product, expandedRow, onToggleExpand, onEdit, onDel
         
         <Box sx={{ mb: 2 }}>
           <Chip
-            icon={<QrCodeIcon />}
-            label={product.serial_number}
+            icon={<FilterListIcon />}
+            label={`ID: #${product.id?.slice(0, 8)}`}
             size="small"
             color="secondary"
             variant="outlined"
@@ -287,20 +287,16 @@ const DesktopProductTable = ({
                 borderBottom: (theme) => `2px solid ${theme.palette.secondary.main}20`,
               }
             }}>
-              <TableCell sx={{ width: isTablet ? '150px' : '180px', pl: isTablet ? 2 : 4 }}>
-                Serial Number
+              <TableCell sx={{ width: '80px', pl: isTablet ? 2 : 4 }}>
+                SN
               </TableCell>
               
-              <TableCell sx={{ minWidth: '180px' }}>
+              <TableCell sx={{ minWidth: '200px' }}>
                 Product Name
               </TableCell>
               
               <TableCell sx={{ minWidth: isTablet ? '200px' : '300px' }}>
-                {isTablet ? (
-                  <DescriptionIcon fontSize="small" />
-                ) : (
-                  'Description'
-                )}
+                Description
               </TableCell>
               
               <TableCell sx={{ width: isTablet ? '100px' : '120px', pr: isTablet ? 2 : 4 }}>
@@ -347,20 +343,19 @@ const DesktopProductTable = ({
                     <Badge
                       color="secondary"
                       variant="dot"
-                      invisible={!product.isRecent}
                       sx={{ mr: 1 }}
                     >
                       <Chip
-                        icon={<QrCodeIcon />}
-                        label={product.serial_number}
+                        label={`#${product.serialNumber}`}
                         size="small"
                         color="secondary"
-                        variant="outlined"
+                        variant="filled"
                         sx={{
-                          fontWeight: 600,
+                          fontWeight: 700,
                           borderRadius: 1.5,
-                          borderWidth: 2,
                           fontSize: isTablet ? '0.75rem' : '0.875rem',
+                          minWidth: '40px',
+                          justifyContent: 'center',
                         }}
                       />
                     </Badge>
@@ -377,7 +372,7 @@ const DesktopProductTable = ({
                           fontSize: isTablet ? '0.875rem' : '1rem',
                         }}
                       >
-                        {product.name.charAt(0).toUpperCase()}
+                        {product.serialNumber}
                       </Avatar>
                       <Typography 
                         variant={isTablet ? "body2" : "subtitle1"} 

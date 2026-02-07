@@ -23,26 +23,25 @@ import {
   Zoom,
   Skeleton,
   LinearProgress,
+  Card,
+  CardContent,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
   FilterList as FilterIcon,
-  Download as DownloadIcon,
-  MoreVert as MoreIcon,
   PersonAdd as PersonAddIcon,
   Refresh as RefreshIcon,
   ImportExport as ImportExportIcon,
-  Email as EmailIcon,
   AccountCircle as AccountIcon,
+  Edit as EditIcon,
   Phone as PhoneIcon,
-  Edit as EditIcon, // Fixed: Import from icons-material
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import PrintIcon from '@mui/icons-material/Print';
 import { supabase } from '../config/supabase';
 
 // Import the new components
-import CustomerStatsCards from './CustomerStatsCards';
 import CustomerTable from './CustomerTable';
 
 const CustomerManagement = ({ onSelectCustomer }) => {
@@ -309,47 +308,39 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   if (loading) {
     return (
       <Box sx={{ p: isMobile ? 2 : 3 }}>
-        <Grid container spacing={3}>
-          {/* Stats Skeletons */}
-          <Grid item xs={12}>
-            <Grid container spacing={2}>
-              {[1, 2, 3, 4].map((item) => (
-                <Grid item xs={6} sm={3} key={item}>
-                  <Skeleton 
-                    variant="rectangular" 
-                    height={120} 
-                    sx={{ borderRadius: 3 }}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          </Grid>
-          
-          {/* Search Bar Skeleton */}
-          <Grid item xs={12}>
-            <Skeleton 
-              variant="rectangular" 
-              height={56} 
-              sx={{ borderRadius: 2 }}
+        {/* Header Skeleton */}
+        <Box sx={{ mb: 4 }}>
+          <Skeleton variant="rectangular" height={40} width="60%" sx={{ mb: 1, borderRadius: 2 }} />
+          <Skeleton variant="rectangular" height={20} width="40%" sx={{ borderRadius: 1 }} />
+        </Box>
+        
+        {/* Total Customers Skeleton */}
+        <Box sx={{ mb: 3 }}>
+          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 3, mb: 2 }} />
+        </Box>
+        
+        {/* Search Bar Skeleton */}
+        <Skeleton 
+          variant="rectangular" 
+          height={56} 
+          sx={{ borderRadius: 2, mb: 3 }}
+        />
+        
+        {/* Table Skeletons */}
+        <Box sx={{ mb: 3 }}>
+          {[...Array(5)].map((_, index) => (
+            <Skeleton
+              key={index}
+              variant="rectangular"
+              height={68}
+              sx={{ 
+                borderRadius: 2,
+                mb: 1,
+                width: '100%'
+              }}
             />
-          </Grid>
-          
-          {/* Table Skeletons */}
-          <Grid item xs={12}>
-            {[...Array(5)].map((_, index) => (
-              <Skeleton
-                key={index}
-                variant="rectangular"
-                height={68}
-                sx={{ 
-                  borderRadius: 2,
-                  mb: 1,
-                  width: '100%'
-                }}
-              />
-            ))}
-          </Grid>
-        </Grid>
+          ))}
+        </Box>
       </Box>
     );
   }
@@ -442,8 +433,52 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           </Grid>
         </Box>
 
-        {/* Stats Cards */}
-        <CustomerStatsCards stats={stats} isMobile={isMobile} />
+        {/* Total Customers Card - Simple Version */}
+        <Box sx={{ mb: 3 }}>
+          <Card sx={{ 
+            borderRadius: 3,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: theme.shadows[8],
+            }
+          }}>
+            <CardContent sx={{ 
+              p: isMobile ? 2 : 3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <Box>
+                <Typography 
+                  variant={isMobile ? "h3" : "h2"} 
+                  fontWeight={800}
+                  sx={{ 
+                    mb: 0.5,
+                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
+                  }}
+                >
+                  {stats.total}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "h6" : "h5"} 
+                  sx={{ 
+                    opacity: 0.9,
+                    fontWeight: 600,
+                  }}
+                >
+                  Total Customers
+                </Typography>
+              </Box>
+              <PeopleIcon sx={{ 
+                fontSize: isMobile ? 60 : 80,
+                opacity: 0.8,
+              }} />
+            </CardContent>
+          </Card>
+        </Box>
 
         {/* Search and Filter Section */}
         <Paper 
