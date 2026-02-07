@@ -10,7 +10,6 @@ import {
   Box,
   IconButton,
   Tooltip,
-  Avatar,
   Chip,
   Badge,
   useTheme,
@@ -24,8 +23,6 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   Phone as PhoneIcon,
-  Email as EmailIcon,
-  LocationOn as LocationIcon,
   CalendarToday as CalendarIcon,
   Print as PrintIcon,
 } from '@mui/icons-material';
@@ -48,6 +45,7 @@ const CustomerTable = ({
   expandedRow,
   toggleRowExpansion,
   searchTerm,
+  hidePagination = false,
 }) => {
   const theme = useTheme();
 
@@ -56,7 +54,7 @@ const CustomerTable = ({
     if (isMobile) return ['name', 'phone'];
     if (isTablet) return ['sn', 'name', 'phone', 'actions'];
     if (isSmallDesktop) return ['sn', 'name', 'phone', 'date', 'actions'];
-    return ['sn', 'name', 'phone', 'email', 'date', 'actions'];
+    return ['sn', 'name', 'phone', 'date', 'actions'];
   };
 
   const visibleColumns = getVisibleColumns();
@@ -79,7 +77,7 @@ const CustomerTable = ({
               theme={theme}
             />
           ))}
-          {renderPagination()}
+          {!hidePagination && renderPagination()}
         </>
       )}
     </Box>
@@ -101,29 +99,23 @@ const CustomerTable = ({
             }}>
               {visibleColumns.includes('sn') && (
                 <TableCell sx={{ width: '70px', pl: isTablet ? 2 : 4 }}>
-                  ID
+                  SN
                 </TableCell>
               )}
               
               <TableCell sx={{ minWidth: '180px' }}>
-                Customer Details
+                Customer Name
               </TableCell>
               
               {visibleColumns.includes('phone') && (
                 <TableCell sx={{ minWidth: '140px' }}>
-                  Contact
-                </TableCell>
-              )}
-              
-              {visibleColumns.includes('email') && (
-                <TableCell sx={{ minWidth: '200px' }}>
-                  Email
+                  Phone Number
                 </TableCell>
               )}
               
               {visibleColumns.includes('date') && (
                 <TableCell sx={{ width: '150px' }}>
-                  Join Date
+                  Added Time
                 </TableCell>
               )}
               
@@ -168,7 +160,7 @@ const CustomerTable = ({
         </Table>
       </TableContainer>
       
-      {paginatedCustomers.length > 0 && renderTablePagination()}
+      {!hidePagination && paginatedCustomers.length > 0 && renderTablePagination()}
     </>
   );
 
@@ -281,36 +273,20 @@ const CustomerMobileCard = ({
   >
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Avatar
-          sx={{
-            bgcolor: 'primary.main',
-            width: 40,
-            height: 40,
-            mr: 2,
-          }}
-        >
-          {customer.name.charAt(0).toUpperCase()}
-        </Avatar>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="subtitle1" fontWeight={600}>
             {customer.name}
           </Typography>
           <Typography variant="caption" color="textSecondary">
-            ID: #{customer.sn}
+            SN: {customer.sn}
           </Typography>
         </Box>
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleRowExpansion(customer.id);
-          }}
-        >
-          {expandedRow === customer.id ? 
-            <Typography variant="caption">Less</Typography> : 
-            <Typography variant="caption">More</Typography>
-          }
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <CalendarIcon sx={{ fontSize: 14, mr: 1, color: 'text.secondary' }} />
+          <Typography variant="caption" color="textSecondary">
+            {format(parseISO(customer.created_at), 'hh:mm a')}
+          </Typography>
+        </Box>
       </Box>
       
       <Box sx={{ mb: 1 }}>
@@ -320,122 +296,50 @@ const CustomerMobileCard = ({
             <Typography variant="body2">{customer.phone}</Typography>
           </Box>
         )}
-        
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <CalendarIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-          <Typography variant="body2">
-            {format(parseISO(customer.created_at), 'dd MMM yyyy')}
-          </Typography>
-        </Box>
       </Box>
       
-      <Collapse in={expandedRow === customer.id}>
-        <Box sx={{ 
-          mt: 2, 
-          pt: 2, 
-          borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` 
-        }}>
-          <Box sx={{ mb: 2 }}>
-            {customer.email && (
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <EmailIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                <Typography variant="body2">{customer.email}</Typography>
-              </Box>
-            )}
-            
-            {customer.address && (
-              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                <LocationIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary', mt: 0.25 }} />
-                <Typography variant="body2">{customer.address}</Typography>
-              </Box>
-            )}
-          </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              fullWidth
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEdit(customer);
-              }}
-            >
-              Edit
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              variant="outlined"
-              fullWidth
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(customer);
-              }}
-            >
-              Delete
-            </Button>
-            <Button
-              size="small"
-              color="secondary"
-              variant="contained"
-              fullWidth
-              startIcon={<PrintIcon />}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectCustomer(customer);
-              }}
-            >
-              Open
-            </Button>
-          </Box>
-        </Box>
-      </Collapse>
-      
-      {expandedRow !== customer.id && (
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          pt: 1,
-          gap: 1 
-        }}>
-          <Button
-            size="small"
-            variant="text"
-            fullWidth
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEdit(customer);
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            variant="text"
-            fullWidth
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete(customer);
-            }}
-          >
-            Delete
-          </Button>
-          <Button
-            size="small"
-            color="secondary"
-            variant="text"
-            fullWidth
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectCustomer(customer);
-            }}
-          >
-            Open
-          </Button>
-        </Box>
-      )}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        pt: 1,
+        gap: 1 
+      }}>
+        <Button
+          size="small"
+          variant="text"
+          fullWidth
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEdit(customer);
+          }}
+        >
+          Edit
+        </Button>
+        <Button
+          size="small"
+          color="error"
+          variant="text"
+          fullWidth
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete(customer);
+          }}
+        >
+          Delete
+        </Button>
+        <Button
+          size="small"
+          color="secondary"
+          variant="text"
+          fullWidth
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectCustomer(customer);
+          }}
+        >
+          Open
+        </Button>
+      </Box>
     </Box>
   </Box>
 );
@@ -471,55 +375,44 @@ const CustomerTableRow = ({
             <Badge
               color="primary"
               variant="dot"
-              invisible={!customer.isRecent}
+              invisible={!customer.isToday}
               sx={{ mr: 1 }}
             >
-              <Chip
-                label={`#${customer.sn}`}
-                size="small"
+              <Typography 
+                variant={isTablet ? "body2" : "body1"} 
+                fontWeight={600}
                 color="primary"
-                variant="outlined"
                 sx={{
-                  fontWeight: 700,
-                  borderRadius: 1.5,
-                  borderWidth: 2,
-                  fontSize: isTablet ? '0.75rem' : '0.875rem',
+                  minWidth: '40px',
+                  textAlign: 'center',
+                  p: 0.5,
+                  borderRadius: 1,
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
                 }}
-              />
+              >
+                {customer.sn}
+              </Typography>
             </Badge>
           </TableCell>
         )}
         
         <TableCell>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Avatar
-              sx={{
-                bgcolor: 'primary.main',
-                width: isTablet ? 32 : 40,
-                height: isTablet ? 32 : 40,
-                mr: 2,
-                fontSize: isTablet ? '0.875rem' : '1rem',
+          <Box>
+            <Typography 
+              variant={isTablet ? "body2" : "subtitle1"} 
+              fontWeight={600}
+              sx={{ 
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '200px',
               }}
             >
-              {customer.name.charAt(0).toUpperCase()}
-            </Avatar>
-            <Box>
-              <Typography 
-                variant={isTablet ? "body2" : "subtitle1"} 
-                fontWeight={600}
-                sx={{ 
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '200px',
-                }}
-              >
-                {customer.name}
-              </Typography>
-              <Typography variant="caption" color="textSecondary">
-                ID: {customer.id?.slice(0, 8)}...
-              </Typography>
-            </Box>
+              {customer.name}
+            </Typography>
+            <Typography variant="caption" color="textSecondary">
+              ID: {customer.id?.slice(0, 8)}...
+            </Typography>
           </Box>
         </TableCell>
         
@@ -551,31 +444,6 @@ const CustomerTableRow = ({
           </TableCell>
         )}
         
-        {visibleColumns.includes('email') && (
-          <TableCell>
-            {customer.email ? (
-              <Typography 
-                variant={isTablet ? "body2" : "body1"}
-                sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: isTablet ? '150px' : '200px',
-                }}
-              >
-                {customer.email}
-              </Typography>
-            ) : (
-              <Typography 
-                variant={isTablet ? "caption" : "body2"} 
-                color="textSecondary"
-              >
-                No email
-              </Typography>
-            )}
-          </TableCell>
-        )}
-        
         {visibleColumns.includes('date') && (
           <TableCell>
             <Box>
@@ -583,10 +451,12 @@ const CustomerTableRow = ({
                 variant={isTablet ? "body2" : "body1"} 
                 fontWeight={500}
               >
-                {format(parseISO(customer.created_at), 'dd MMM yyyy')}
+                {format(parseISO(customer.created_at), 'hh:mm a')}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                {format(parseISO(customer.created_at), 'hh:mm a')}
+                {customer.isToday ? 'Today' : 
+                 customer.isYesterday ? 'Yesterday' : 
+                 format(parseISO(customer.created_at), 'dd MMM')}
               </Typography>
             </Box>
           </TableCell>
@@ -659,59 +529,6 @@ const CustomerTableRow = ({
           </TableCell>
         )}
       </TableRow>
-      
-      {/* Expandable row for tablet details */}
-      {isTablet && visibleColumns.length < 5 && (
-        <TableRow>
-          <TableCell 
-            colSpan={visibleColumns.length + 1} 
-            sx={{ 
-              p: 0,
-              borderBottom: expandedRow === customer.id ? 
-                `2px solid ${alpha(theme.palette.primary.main, 0.1)}` : 'none'
-            }}
-          >
-            <Collapse in={expandedRow === customer.id}>
-              <Box sx={{ 
-                p: 2, 
-                bgcolor: alpha(theme.palette.primary.main, 0.02),
-                borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}>
-                <Box sx={{ flex: 1 }}>
-                  {!visibleColumns.includes('email') && customer.email && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <EmailIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{customer.email}</Typography>
-                    </Box>
-                  )}
-                  
-                  {customer.address && (
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <LocationIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary', mt: 0.25 }} />
-                      <Typography variant="body2">{customer.address}</Typography>
-                    </Box>
-                  )}
-                </Box>
-                
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleRowExpansion(customer.id);
-                  }}
-                >
-                  <Typography variant="caption">
-                    {expandedRow === customer.id ? 'Less' : 'More'}
-                  </Typography>
-                </IconButton>
-              </Box>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      )}
     </>
   );
 };

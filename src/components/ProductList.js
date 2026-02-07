@@ -25,11 +25,9 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Description as DescriptionIcon,
   Inventory as InventoryIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
-  FilterList as FilterListIcon,
 } from '@mui/icons-material';
 
 const ProductList = ({
@@ -154,6 +152,8 @@ const MobileProductCard = ({ product, expandedRow, onToggleExpand, onEdit, onDel
               width: 40,
               height: 40,
               mr: 2,
+              fontWeight: 600,
+              fontSize: '1rem',
             }}
           >
             {product.serialNumber}
@@ -163,7 +163,7 @@ const MobileProductCard = ({ product, expandedRow, onToggleExpand, onEdit, onDel
               {product.name}
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Serial #: {product.serialNumber}
+              Serial: {product.serialNumber}
             </Typography>
           </Box>
           <IconButton
@@ -175,17 +175,6 @@ const MobileProductCard = ({ product, expandedRow, onToggleExpand, onEdit, onDel
               <KeyboardArrowDownIcon />
             }
           </IconButton>
-        </Box>
-        
-        <Box sx={{ mb: 2 }}>
-          <Chip
-            icon={<FilterListIcon />}
-            label={`ID: #${product.id?.slice(0, 8)}`}
-            size="small"
-            color="secondary"
-            variant="outlined"
-            sx={{ mb: 1 }}
-          />
         </Box>
         
         <Collapse in={expandedRow === product.id}>
@@ -340,40 +329,38 @@ const DesktopProductTable = ({
                   }}
                 >
                   <TableCell sx={{ pl: isTablet ? 2 : 4 }}>
-                    <Badge
-                      color="secondary"
-                      variant="dot"
-                      sx={{ mr: 1 }}
-                    >
-                      <Chip
-                        label={`#${product.serialNumber}`}
-                        size="small"
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Badge
                         color="secondary"
-                        variant="filled"
-                        sx={{
-                          fontWeight: 700,
-                          borderRadius: 1.5,
-                          fontSize: isTablet ? '0.75rem' : '0.875rem',
-                          minWidth: '40px',
-                          justifyContent: 'center',
-                        }}
-                      />
-                    </Badge>
+                        variant="dot"
+                        sx={{ mr: 1 }}
+                      >
+                        <Box
+                          sx={{
+                            width: isTablet ? 32 : 40,
+                            height: isTablet ? 32 : 40,
+                            borderRadius: '50%',
+                            bgcolor: 'secondary.main',
+                            color: 'secondary.contrastText',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: isTablet ? '0.875rem' : '1rem',
+                          }}
+                        >
+                          {product.serialNumber}
+                        </Box>
+                      </Badge>
+                    </Box>
                   </TableCell>
                   
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Avatar
-                        sx={{
-                          bgcolor: 'secondary.main',
-                          width: isTablet ? 32 : 40,
-                          height: isTablet ? 32 : 40,
-                          mr: 2,
-                          fontSize: isTablet ? '0.875rem' : '1rem',
-                        }}
-                      >
-                        {product.serialNumber}
-                      </Avatar>
                       <Typography 
                         variant={isTablet ? "body2" : "subtitle1"} 
                         fontWeight={600}
@@ -387,6 +374,13 @@ const DesktopProductTable = ({
                         {product.name}
                       </Typography>
                     </Box>
+                    <Typography 
+                      variant="caption" 
+                      color="textSecondary"
+                      sx={{ mt: 0.5 }}
+                    >
+                      Serial: {product.serialNumber}
+                    </Typography>
                   </TableCell>
                   
                   <TableCell>

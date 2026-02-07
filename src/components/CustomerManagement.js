@@ -17,7 +17,7 @@ import {
   Fade,
   useMediaQuery,
   useTheme,
-  CircularProgress,
+  Collapse,
   Tooltip,
   alpha,
   Zoom,
@@ -25,6 +25,8 @@ import {
   LinearProgress,
   Card,
   CardContent,
+  Chip,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -37,9 +39,13 @@ import {
   Edit as EditIcon,
   Phone as PhoneIcon,
   People as PeopleIcon,
+  Today as TodayIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import PrintIcon from '@mui/icons-material/Print';
 import { supabase } from '../config/supabase';
+import { format, parseISO, isToday, isYesterday, isThisWeek, startOfDay, differenceInDays } from 'date-fns';
 
 // Import the new components
 import CustomerTable from './CustomerTable';
@@ -57,8 +63,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
-    email: '',
-    address: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -67,10 +71,14 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
+  // Group customers by date
+  const [groupedCustomers, setGroupedCustomers] = useState({});
+  const [expandedDates, setExpandedDates] = useState({});
+  
   const [stats, setStats] = useState({
     total: 0,
-    recent: 0,
-    withoutPhone: 0,
+    today: 0,
+    yesterday: 0,
   });
   
   const [snackbar, setSnackbar] = useState({
@@ -92,6 +100,39 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     });
   }, []);
 
+  // Group customers by date
+  const groupCustomersByDate = (customersList) => {
+    const grouped = {};
+    
+    customersList.forEach(customer => {
+      const date = startOfDay(parseISO(customer.created_at));
+      const dateKey = format(date, 'yyyy-MM-dd');
+      const displayDate = format(date, 'dd MMM yyyy');
+      
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = {
+          date: date,
+          displayDate: displayDate,
+          customers: [],
+          count: 0
+        };
+      }
+      
+      grouped[dateKey].customers.push(customer);
+      grouped[dateKey].count++;
+    });
+    
+    // Sort dates in descending order
+    const sortedGrouped = {};
+    Object.keys(grouped)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .forEach(key => {
+        sortedGrouped[key] = grouped[key];
+      });
+    
+    return sortedGrouped;
+  };
+
   const fetchCustomers = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -106,22 +147,35 @@ const CustomerManagement = ({ onSelectCustomer }) => {
       
       // Add SN numbers and calculate stats
       const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const todayStart = startOfDay(now);
+      const yesterdayStart = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
       
       const customersWithSN = (data || []).map((customer, index) => ({
         ...customer,
         sn: index + 1,
-        isRecent: new Date(customer.created_at) > weekAgo,
+        isToday: startOfDay(parseISO(customer.created_at)).getTime() === todayStart.getTime(),
+        isYesterday: startOfDay(parseISO(customer.created_at)).getTime() === yesterdayStart.getTime(),
       }));
       
+      // Group customers by date
+      const grouped = groupCustomersByDate(customersWithSN);
+      
+      // Calculate stats
       const stats = {
         total: customersWithSN.length,
-        recent: customersWithSN.filter(c => c.isRecent).length,
-        withoutPhone: customersWithSN.filter(c => !c.phone).length,
+        today: customersWithSN.filter(c => c.isToday).length,
+        yesterday: customersWithSN.filter(c => c.isYesterday).length,
       };
       
       setCustomers(customersWithSN);
+      setGroupedCustomers(grouped);
       setStats(stats);
+      
+      // Expand today's customers by default
+      const todayKey = format(todayStart, 'yyyy-MM-dd');
+      setExpandedDates({
+        [todayKey]: true
+      });
       
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -140,8 +194,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     // Validation
     const name = newCustomer.name?.trim();
     const phone = newCustomer.phone?.trim();
-    const email = newCustomer.email?.trim();
-    const address = newCustomer.address?.trim();
 
     if (!name) {
       setError('Customer name is required');
@@ -153,16 +205,9 @@ const CustomerManagement = ({ onSelectCustomer }) => {
       return;
     }
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
     const customerData = {
       name,
       phone: phone || null,
-      email: email || null,
-      address: address || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -240,8 +285,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     setNewCustomer({
       name: customer.name || '',
       phone: customer.phone || '',
-      email: customer.email || '',
-      address: customer.address || '',
     });
     setOpenDialog(true);
   };
@@ -249,7 +292,7 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingCustomer(null);
-    setNewCustomer({ name: '', phone: '', email: '', address: '' });
+    setNewCustomer({ name: '', phone: '' });
     setError('');
   };
 
@@ -261,48 +304,122 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     showSnackbar('Export feature coming soon!', 'info');
   };
 
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage);
+  const toggleDateExpansion = (dateKey) => {
+    setExpandedDates(prev => ({
+      ...prev,
+      [dateKey]: !prev[dateKey]
+    }));
   };
 
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+  const renderDateGroups = () => {
+    return Object.keys(groupedCustomers).map(dateKey => {
+      const group = groupedCustomers[dateKey];
+      const isExpanded = expandedDates[dateKey];
+      const isTodayGroup = startOfDay(new Date()).getTime() === group.date.getTime();
+      const isYesterdayGroup = startOfDay(new Date().getTime() - 24 * 60 * 60 * 1000).getTime() === group.date.getTime();
+      
+      return (
+        <Box key={dateKey} sx={{ mb: 3 }}>
+          {/* Date Header */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 1,
+              borderRadius: 2,
+              bgcolor: isTodayGroup ? alpha(theme.palette.primary.main, 0.08) : 
+                       isYesterdayGroup ? alpha(theme.palette.info.main, 0.08) : 
+                       'background.paper',
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              cursor: 'pointer',
+              '&:hover': {
+                bgcolor: isTodayGroup ? alpha(theme.palette.primary.main, 0.12) : 
+                         isYesterdayGroup ? alpha(theme.palette.info.main, 0.12) : 
+                         alpha(theme.palette.action.hover, 0.04),
+              }
+            }}
+            onClick={() => toggleDateExpansion(dateKey)}
+          >
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between' 
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <TodayIcon color={isTodayGroup ? "primary" : isYesterdayGroup ? "info" : "action"} />
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>
+                    {group.displayDate}
+                    {isTodayGroup && (
+                      <Chip
+                        label="Today"
+                        size="small"
+                        color="primary"
+                        sx={{ ml: 2, height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {isYesterdayGroup && (
+                      <Chip
+                        label="Yesterday"
+                        size="small"
+                        color="info"
+                        sx={{ ml: 2, height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    {group.count} customer{group.count !== 1 ? 's' : ''}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="textSecondary">
+                  {isExpanded ? 'Hide' : 'Show'}
+                </Typography>
+                {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </Box>
+            </Box>
+          </Paper>
+          
+          {/* Customers for this date */}
+          <Collapse in={isExpanded}>
+            <CustomerTable
+              customers={group.customers}
+              paginatedCustomers={group.customers}
+              filteredCustomers={group.customers}
+              page={0}
+              rowsPerPage={group.customers.length}
+              handleChangePage={() => {}}
+              handleChangeRowsPerPage={() => {}}
+              handleEdit={handleEdit}
+              handleDelete={handleDelete}
+              onSelectCustomer={onSelectCustomer}
+              isMobile={isMobile}
+              isTablet={isTablet}
+              isSmallDesktop={isSmallDesktop}
+              expandedRow={expandedRow}
+              toggleRowExpansion={setExpandedRow}
+              searchTerm={searchTerm}
+              hidePagination={true}
+            />
+          </Collapse>
+        </Box>
+      );
+    });
   };
 
-  const toggleRowExpansion = (customerId) => {
-    setExpandedRow(expandedRow === customerId ? null : customerId);
-  };
-
+  // Filter customers based on search term
   const filteredCustomers = customers.filter(customer => {
     if (!customer) return false;
-    if (selectedFilter === 'recent' && !customer.isRecent) return false;
-    if (selectedFilter === 'noPhone' && customer.phone) return false;
     
     const search = searchTerm.toLowerCase();
     return (
       customer.name?.toLowerCase().includes(search) ||
       customer.phone?.includes(search) ||
-      customer.email?.toLowerCase().includes(search) ||
-      customer.address?.toLowerCase().includes(search) ||
       customer.sn?.toString().includes(search)
     );
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case 'name':
-        return a.name.localeCompare(b.name);
-      case 'date':
-        return new Date(b.created_at) - new Date(a.created_at);
-      default:
-        return 0;
-    }
   });
-
-  // Pagination
-  const paginatedCustomers = filteredCustomers.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
 
   // Loading skeleton
   if (loading) {
@@ -326,19 +443,34 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           sx={{ borderRadius: 2, mb: 3 }}
         />
         
-        {/* Table Skeletons */}
+        {/* Date Group Skeletons */}
         <Box sx={{ mb: 3 }}>
-          {[...Array(5)].map((_, index) => (
-            <Skeleton
-              key={index}
-              variant="rectangular"
-              height={68}
-              sx={{ 
-                borderRadius: 2,
-                mb: 1,
-                width: '100%'
-              }}
-            />
+          {[...Array(3)].map((_, index) => (
+            <React.Fragment key={index}>
+              <Skeleton
+                variant="rectangular"
+                height={80}
+                sx={{ 
+                  borderRadius: 2,
+                  mb: 1,
+                  width: '100%'
+                }}
+              />
+              <Box sx={{ pl: 2 }}>
+                {[...Array(2)].map((_, subIndex) => (
+                  <Skeleton
+                    key={subIndex}
+                    variant="rectangular"
+                    height={60}
+                    sx={{ 
+                      borderRadius: 2,
+                      mb: 1,
+                      width: '100%'
+                    }}
+                  />
+                ))}
+              </Box>
+            </React.Fragment>
           ))}
         </Box>
       </Box>
@@ -370,7 +502,7 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                 Customer Management
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Manage your scrap customers efficiently
+                Manage your customers - Grouped by day
               </Typography>
             </Grid>
             
@@ -433,25 +565,22 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           </Grid>
         </Box>
 
-        {/* Total Customers Card - Simple Version */}
-        <Box sx={{ mb: 3 }}>
-          <Card sx={{ 
-            borderRadius: 3,
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-            '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: theme.shadows[8],
-            }
-          }}>
-            <CardContent sx={{ 
-              p: isMobile ? 2 : 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
+        {/* Statistics Cards */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} sm={4}>
+            <Card sx={{ 
+              borderRadius: 3,
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: theme.shadows[8],
+              }
             }}>
-              <Box>
+              <CardContent sx={{ 
+                p: isMobile ? 2 : 3,
+              }}>
                 <Typography 
                   variant={isMobile ? "h3" : "h2"} 
                   fontWeight={800}
@@ -471,16 +600,86 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                 >
                   Total Customers
                 </Typography>
-              </Box>
-              <PeopleIcon sx={{ 
-                fontSize: isMobile ? 60 : 80,
-                opacity: 0.8,
-              }} />
-            </CardContent>
-          </Card>
-        </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={4}>
+            <Card sx={{ 
+              borderRadius: 3,
+              bgcolor: 'info.main',
+              color: 'info.contrastText',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: theme.shadows[8],
+              }
+            }}>
+              <CardContent sx={{ 
+                p: isMobile ? 2 : 3,
+              }}>
+                <Typography 
+                  variant={isMobile ? "h3" : "h2"} 
+                  fontWeight={800}
+                  sx={{ 
+                    mb: 0.5,
+                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
+                  }}
+                >
+                  {stats.today}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "h6" : "h5"} 
+                  sx={{ 
+                    opacity: 0.9,
+                    fontWeight: 600,
+                  }}
+                >
+                  Today's Customers
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={4}>
+            <Card sx={{ 
+              borderRadius: 3,
+              bgcolor: 'success.main',
+              color: 'success.contrastText',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: theme.shadows[8],
+              }
+            }}>
+              <CardContent sx={{ 
+                p: isMobile ? 2 : 3,
+              }}>
+                <Typography 
+                  variant={isMobile ? "h3" : "h2"} 
+                  fontWeight={800}
+                  sx={{ 
+                    mb: 0.5,
+                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
+                  }}
+                >
+                  {stats.yesterday}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "h6" : "h5"} 
+                  sx={{ 
+                    opacity: 0.9,
+                    fontWeight: 600,
+                  }}
+                >
+                  Yesterday's
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
 
-        {/* Search and Filter Section */}
+        {/* Search Section */}
         <Paper 
           elevation={0}
           sx={{ 
@@ -492,10 +691,10 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           }}
         >
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
-                placeholder="Search customers by name, phone, email..."
+                placeholder="Search customers by name or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 variant="outlined"
@@ -522,36 +721,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                 }}
               />
             </Grid>
-            
-            <Grid item xs={12} md={6}>
-              <Box sx={{ 
-                display: 'flex', 
-                gap: 2,
-                justifyContent: isMobile ? 'space-between' : 'flex-end',
-                flexWrap: 'wrap'
-              }}>
-                <Button
-                  startIcon={<FilterIcon />}
-                  variant="outlined"
-                  onClick={() => setSelectedFilter(
-                    selectedFilter === 'all' ? 'recent' : 
-                    selectedFilter === 'recent' ? 'noPhone' : 'all'
-                  )}
-                  sx={{ borderRadius: 2 }}
-                >
-                  {selectedFilter === 'all' ? 'All Customers' : 
-                   selectedFilter === 'recent' ? 'Recent' : 'No Phone'}
-                </Button>
-                
-                <Button
-                  variant="outlined"
-                  onClick={() => setSortBy(sortBy === 'name' ? 'date' : 'name')}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Sort: {sortBy === 'name' ? 'A-Z' : 'Newest'}
-                </Button>
-              </Box>
-            </Grid>
           </Grid>
           
           {refreshing && (
@@ -565,35 +734,42 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           )}
         </Paper>
 
-        {/* Customer Table */}
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: 3,
-            overflow: 'hidden',
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            bgcolor: 'background.paper',
-          }}
-        >
-          <CustomerTable
-            customers={customers}
-            paginatedCustomers={paginatedCustomers}
-            filteredCustomers={filteredCustomers}
-            page={page}
-            rowsPerPage={rowsPerPage}
-            handleChangePage={handleChangePage}
-            handleChangeRowsPerPage={handleChangeRowsPerPage}
-            handleEdit={handleEdit}
-            handleDelete={handleDelete}
-            onSelectCustomer={onSelectCustomer}
-            isMobile={isMobile}
-            isTablet={isTablet}
-            isSmallDesktop={isSmallDesktop}
-            expandedRow={expandedRow}
-            toggleRowExpansion={toggleRowExpansion}
-            searchTerm={searchTerm}
-          />
-        </Paper>
+        {/* Date Grouped Customers */}
+        {searchTerm ? (
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 3,
+              overflow: 'hidden',
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              bgcolor: 'background.paper',
+            }}
+          >
+            <CustomerTable
+              customers={customers}
+              paginatedCustomers={filteredCustomers.slice(0, rowsPerPage)}
+              filteredCustomers={filteredCustomers}
+              page={page}
+              rowsPerPage={rowsPerPage}
+              handleChangePage={(e, newPage) => setPage(newPage)}
+              handleChangeRowsPerPage={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
+              handleEdit={handleEdit}
+              handleDelete={handleDelete}
+              onSelectCustomer={onSelectCustomer}
+              isMobile={isMobile}
+              isTablet={isTablet}
+              isSmallDesktop={isSmallDesktop}
+              expandedRow={expandedRow}
+              toggleRowExpansion={setExpandedRow}
+              searchTerm={searchTerm}
+            />
+          </Paper>
+        ) : (
+          /* Date Grouped View */
+          <Box>
+            {renderDateGroups()}
+          </Box>
+        )}
 
         {/* Add/Edit Customer Dialog - Responsive */}
         <Dialog
@@ -681,35 +857,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                 />
                 <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
                   Optional. Enter phone number for contact
-                </Typography>
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Email Address"
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  size={isMobile ? "small" : "medium"}
-                />
-                <Typography variant="caption" color="textSecondary" sx={{ pl: 1 }}>
-                  Optional. Enter email for digital communication
-                </Typography>
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Address"
-                  multiline
-                  rows={isMobile ? 2 : 3}
-                  value={newCustomer.address}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
-                  size={isMobile ? "small" : "medium"}
-                />
-                <Typography variant="caption" color="textSecondary" sx={{ pl: 1 }}>
-                  Optional. Enter customer's address
                 </Typography>
               </Grid>
             </Grid>

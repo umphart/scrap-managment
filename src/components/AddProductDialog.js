@@ -12,10 +12,6 @@ import {
   Box,
   Alert,
   Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   InputAdornment,
   IconButton,
   CircularProgress,
@@ -49,7 +45,6 @@ const AddProductDialog = ({
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState('1');
   const [price, setPrice] = useState('');
-  const [unit, setUnit] = useState('kg');
   const [error, setError] = useState('');
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -96,18 +91,13 @@ const AddProductDialog = ({
       return;
     }
 
-    if (!unit) {
-      setError('Please select a unit');
-      return;
-    }
-
     try {
       setLoading(true);
       const transactionData = {
         product: selectedProduct,
         quantity: parseFloat(quantity),
         price: parseFloat(price),
-        unit: unit,
+        unit: 'kg', // Always kilogram
         total_amount: parseFloat(price) * parseFloat(quantity),
       };
 
@@ -125,7 +115,6 @@ const AddProductDialog = ({
     setSelectedProduct(null);
     setQuantity('1');
     setPrice('');
-    setUnit('kg');
     setSearchTerm('');
     setError('');
   };
@@ -419,7 +408,7 @@ const AddProductDialog = ({
               <Grid container spacing={isMobile ? 1 : 2}>
                 <Grid item xs={6}>
                   <TextField
-                    label="Quantity"
+                    label="Quantity (kg)"
                     type="number"
                     fullWidth
                     value={quantity}
@@ -434,11 +423,12 @@ const AddProductDialog = ({
                     }}
                     required
                     size={isMobile ? "small" : "medium"}
+                    helperText="Weight in kilograms"
                   />
                 </Grid>
                 <Grid item xs={6}>
                   <TextField
-                    label="Price"
+                    label="Price per kg"
                     type="number"
                     fullWidth
                     value={price}
@@ -458,29 +448,29 @@ const AddProductDialog = ({
                     }}
                     required
                     size={isMobile ? "small" : "medium"}
+                    helperText="Price per kilogram"
                   />
                 </Grid>
               </Grid>
             </Grid>
 
+            {/* Unit Display - Always kilogram */}
             <Grid item xs={12}>
-              <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                <InputLabel>Unit</InputLabel>
-                <Select
-                  value={unit}
-                  label="Unit"
-                  onChange={(e) => setUnit(e.target.value)}
-                  sx={{ borderRadius: 2 }}
-                  required
-                >
-                  <MenuItem value="kg">Kilogram (kg)</MenuItem>
-                  <MenuItem value="g">Gram (g)</MenuItem>
-                  <MenuItem value="piece">Piece</MenuItem>
-                  <MenuItem value="liter">Liter</MenuItem>
-                  <MenuItem value="packet">Packet</MenuItem>
-                  <MenuItem value="bag">Bag</MenuItem>
-                </Select>
-              </FormControl>
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: 'grey.50', 
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'grey.300',
+                textAlign: 'center'
+              }}>
+                <Typography variant="body2" color="textSecondary">
+                  Unit: <strong>Kilogram (kg)</strong>
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  All transactions are measured in kilograms
+                </Typography>
+              </Box>
             </Grid>
           </Grid>
         </Box>
@@ -702,7 +692,7 @@ const AddProductDialog = ({
           </Button>
           
           {/* Transaction Summary in Footer */}
-          {selectedProduct && quantity && price && unit && (
+          {selectedProduct && quantity && price && (
             <Box sx={{ 
               display: 'flex', 
               alignItems: 'center', 
@@ -727,7 +717,7 @@ const AddProductDialog = ({
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  {quantity} {unit} × ₦{parseFloat(price || 0).toFixed(2)}
+                  {quantity} kg × ₦{parseFloat(price || 0).toFixed(2)}/kg
                 </Typography>
               </Box>
               <Typography 
@@ -747,7 +737,7 @@ const AddProductDialog = ({
           <Button 
             onClick={handleSubmit}
             variant="contained"
-            disabled={!selectedProduct || !quantity || !price || !unit || 
+            disabled={!selectedProduct || !quantity || !price || 
                      parseFloat(quantity) <= 0 || parseFloat(price) <= 0 || loading}
             sx={{ 
               borderRadius: 2,
