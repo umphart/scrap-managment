@@ -9,7 +9,6 @@ import {
   TableRow,
   IconButton,
   Typography,
-  Chip,
   Box,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -47,7 +46,6 @@ const TransactionTable = ({ transactions, onDeleteTransaction, loading }) => {
             <TableRow sx={{ backgroundColor: 'primary.50' }}>
               <TableCell sx={{ fontWeight: 600, py: 2 }}>Date & Time</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Product</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Serial No</TableCell>
               <TableCell align="right" sx={{ fontWeight: 600 }}>Price</TableCell>
               <TableCell align="right" sx={{ fontWeight: 600 }}>Quantity</TableCell>
               <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
@@ -76,32 +74,18 @@ const TransactionTable = ({ transactions, onDeleteTransaction, loading }) => {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="subtitle2" fontWeight="medium">
-                    {transaction.products?.name || 'Unknown Product'}
-                  </Typography>
-                  {transaction.products?.description && (
-                    <Typography variant="caption" color="textSecondary" display="block">
-                      {transaction.products.description.length > 30 
-                        ? `${transaction.products.description.substring(0, 30)}...` 
-                        : transaction.products.description}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight="medium">
+                      {transaction.products?.name || 'Unknown Product'}
                     </Typography>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {transaction.products?.serial_number ? (
-                    <Chip 
-                      label={transaction.products.serial_number} 
-                      size="small"
-                      variant="outlined"
-                      sx={{ 
-                        fontWeight: 500,
-                        borderColor: 'primary.main',
-                        color: 'primary.main'
-                      }}
-                    />
-                  ) : (
-                    <Typography variant="body2" color="textSecondary">N/A</Typography>
-                  )}
+                    {transaction.products?.description && (
+                      <Typography variant="caption" color="textSecondary" display="block">
+                        {transaction.products.description.length > 30 
+                          ? `${transaction.products.description.substring(0, 30)}...` 
+                          : transaction.products.description}
+                      </Typography>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="body2" fontWeight="medium">

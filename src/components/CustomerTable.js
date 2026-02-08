@@ -86,6 +86,7 @@ const CustomerTable = ({
                 '&:hover': {
                   borderColor: alpha(theme.palette.primary.main, 0.2),
                   bgcolor: alpha(theme.palette.primary.main, 0.02),
+                  cursor: 'pointer',
                 },
               }}
               onClick={() => onSelectCustomer(customer)}
@@ -270,6 +271,7 @@ const CustomerTable = ({
                     transition: 'background-color 0.2s',
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.02),
+                      cursor: 'pointer',
                     },
                     '& td': {
                       py: isTablet ? 1.25 : 1.5,
@@ -277,6 +279,7 @@ const CustomerTable = ({
                       borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
                     }
                   }}
+                  onClick={() => onSelectCustomer(customer)}
                 >
                   <TableCell>
                     <Box
@@ -356,7 +359,10 @@ const CustomerTable = ({
                       <Tooltip title="Edit" arrow>
                         <IconButton
                           size="small"
-                          onClick={() => handleEdit(customer)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(customer);
+                          }}
                           sx={{ 
                             bgcolor: alpha(theme.palette.primary.main, 0.08),
                             '&:hover': {
@@ -371,7 +377,10 @@ const CustomerTable = ({
                       <Tooltip title="Delete" arrow>
                         <IconButton
                           size="small"
-                          onClick={() => handleDelete(customer)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(customer);
+                          }}
                           sx={{ 
                             bgcolor: alpha(theme.palette.error.main, 0.08),
                             color: 'error.main',
