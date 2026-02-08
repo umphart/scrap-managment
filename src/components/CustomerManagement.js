@@ -17,7 +17,6 @@ import {
   Fade,
   useMediaQuery,
   useTheme,
-  Collapse,
   Tooltip,
   alpha,
   Zoom,
@@ -25,38 +24,38 @@ import {
   LinearProgress,
   Card,
   CardContent,
+  Avatar,
   Chip,
-  Divider,
+  Stack,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
-  PersonAdd as PersonAddIcon,
   Refresh as RefreshIcon,
-  ImportExport as ImportExportIcon,
   AccountCircle as AccountIcon,
   Edit as EditIcon,
   Phone as PhoneIcon,
-  People as PeopleIcon,
   Today as TodayIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
+  People as PeopleIcon,
+  AttachMoney as MoneyIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
-import PrintIcon from '@mui/icons-material/Print';
 import { supabase } from '../config/supabase';
-import { format, parseISO, isToday, isYesterday, isThisWeek, startOfDay, differenceInDays } from 'date-fns';
+import { format, parseISO, isToday, startOfDay } from 'date-fns';
 
-// Import the new components
+// Import the CustomerTable component
 import CustomerTable from './CustomerTable';
 
 const CustomerManagement = ({ onSelectCustomer }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-  const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'));
   
+  const [activeTab, setActiveTab] = useState(0);
   const [customers, setCustomers] = useState([]);
+  const [todayCustomers, setTodayCustomers] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -71,14 +70,9 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
-  // Group customers by date
-  const [groupedCustomers, setGroupedCustomers] = useState({});
-  const [expandedDates, setExpandedDates] = useState({});
-  
   const [stats, setStats] = useState({
-    total: 0,
     today: 0,
-    yesterday: 0,
+    todayMoney: 0,
   });
   
   const [snackbar, setSnackbar] = useState({
@@ -87,9 +81,6 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     severity: 'success',
     action: null,
   });
-
-  const [selectedFilter, setSelectedFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
 
   const showSnackbar = useCallback((message, severity = 'success', action = null) => {
     setSnackbar({
@@ -100,81 +91,58 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     });
   }, []);
 
-  // Group customers by date
-  const groupCustomersByDate = (customersList) => {
-    const grouped = {};
-    
-    customersList.forEach(customer => {
-      const date = startOfDay(parseISO(customer.created_at));
-      const dateKey = format(date, 'yyyy-MM-dd');
-      const displayDate = format(date, 'dd MMM yyyy');
-      
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = {
-          date: date,
-          displayDate: displayDate,
-          customers: [],
-          count: 0
-        };
-      }
-      
-      grouped[dateKey].customers.push(customer);
-      grouped[dateKey].count++;
-    });
-    
-    // Sort dates in descending order
-    const sortedGrouped = {};
-    Object.keys(grouped)
-      .sort((a, b) => new Date(b) - new Date(a))
-      .forEach(key => {
-        sortedGrouped[key] = grouped[key];
-      });
-    
-    return sortedGrouped;
-  };
-
   const fetchCustomers = useCallback(async () => {
     try {
       setRefreshing(true);
-      const { data, error } = await supabase
+      const today = new Date();
+      const todayStart = startOfDay(today);
+      
+      // Fetch all customers (for All Customers tab)
+      const { data: allData, error: allError } = await supabase
         .from('customers')
         .select('*')
         .order('created_at', { ascending: false });
       
-      if (error) {
-        throw error;
-      }
+      if (allError) throw allError;
       
-      // Add SN numbers and calculate stats
-      const now = new Date();
-      const todayStart = startOfDay(now);
-      const yesterdayStart = startOfDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-      
-      const customersWithSN = (data || []).map((customer, index) => ({
+      const allCustomersWithSN = (allData || []).map((customer, index) => ({
         ...customer,
         sn: index + 1,
-        isToday: startOfDay(parseISO(customer.created_at)).getTime() === todayStart.getTime(),
-        isYesterday: startOfDay(parseISO(customer.created_at)).getTime() === yesterdayStart.getTime(),
       }));
       
-      // Group customers by date
-      const grouped = groupCustomersByDate(customersWithSN);
+      setCustomers(allCustomersWithSN);
       
-      // Calculate stats
-      const stats = {
-        total: customersWithSN.length,
-        today: customersWithSN.filter(c => c.isToday).length,
-        yesterday: customersWithSN.filter(c => c.isYesterday).length,
-      };
+      // Fetch today's customers and money (for Today tab)
+      const { data: todayData, error: todayError } = await supabase
+        .from('customers')
+        .select('*')
+        .gte('created_at', todayStart.toISOString())
+        .lt('created_at', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false });
       
-      setCustomers(customersWithSN);
-      setGroupedCustomers(grouped);
-      setStats(stats);
+      if (todayError) throw todayError;
       
-      // Expand today's customers by default
-      const todayKey = format(todayStart, 'yyyy-MM-dd');
-      setExpandedDates({
-        [todayKey]: true
+      const todayCustomersWithSN = (todayData || []).map((customer, index) => ({
+        ...customer,
+        sn: index + 1,
+        isToday: true,
+      }));
+      
+      // Fetch today's transactions to calculate total money
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('transactions')
+        .select('total_amount')
+        .gte('created_at', todayStart.toISOString())
+        .lt('created_at', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString());
+      
+      if (transactionsError) throw transactionsError;
+      
+      const todayMoney = transactionsData?.reduce((sum, transaction) => sum + (transaction.total_amount || 0), 0) || 0;
+      
+      setTodayCustomers(todayCustomersWithSN);
+      setStats({
+        today: todayCustomersWithSN.length,
+        todayMoney: todayMoney,
       });
       
     } catch (error) {
@@ -300,117 +268,14 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     fetchCustomers();
   };
 
-  const handleExport = () => {
-    showSnackbar('Export feature coming soon!', 'info');
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    setPage(0);
+    setSearchTerm('');
   };
 
-  const toggleDateExpansion = (dateKey) => {
-    setExpandedDates(prev => ({
-      ...prev,
-      [dateKey]: !prev[dateKey]
-    }));
-  };
-
-  const renderDateGroups = () => {
-    return Object.keys(groupedCustomers).map(dateKey => {
-      const group = groupedCustomers[dateKey];
-      const isExpanded = expandedDates[dateKey];
-      const isTodayGroup = startOfDay(new Date()).getTime() === group.date.getTime();
-      const isYesterdayGroup = startOfDay(new Date().getTime() - 24 * 60 * 60 * 1000).getTime() === group.date.getTime();
-      
-      return (
-        <Box key={dateKey} sx={{ mb: 3 }}>
-          {/* Date Header */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              mb: 1,
-              borderRadius: 2,
-              bgcolor: isTodayGroup ? alpha(theme.palette.primary.main, 0.08) : 
-                       isYesterdayGroup ? alpha(theme.palette.info.main, 0.08) : 
-                       'background.paper',
-              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-              cursor: 'pointer',
-              '&:hover': {
-                bgcolor: isTodayGroup ? alpha(theme.palette.primary.main, 0.12) : 
-                         isYesterdayGroup ? alpha(theme.palette.info.main, 0.12) : 
-                         alpha(theme.palette.action.hover, 0.04),
-              }
-            }}
-            onClick={() => toggleDateExpansion(dateKey)}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between' 
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <TodayIcon color={isTodayGroup ? "primary" : isYesterdayGroup ? "info" : "action"} />
-                <Box>
-                  <Typography variant="h6" fontWeight={600}>
-                    {group.displayDate}
-                    {isTodayGroup && (
-                      <Chip
-                        label="Today"
-                        size="small"
-                        color="primary"
-                        sx={{ ml: 2, height: 20, fontSize: '0.75rem' }}
-                      />
-                    )}
-                    {isYesterdayGroup && (
-                      <Chip
-                        label="Yesterday"
-                        size="small"
-                        color="info"
-                        sx={{ ml: 2, height: 20, fontSize: '0.75rem' }}
-                      />
-                    )}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {group.count} customer{group.count !== 1 ? 's' : ''}
-                  </Typography>
-                </Box>
-              </Box>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="textSecondary">
-                  {isExpanded ? 'Hide' : 'Show'}
-                </Typography>
-                {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </Box>
-            </Box>
-          </Paper>
-          
-          {/* Customers for this date */}
-          <Collapse in={isExpanded}>
-            <CustomerTable
-              customers={group.customers}
-              paginatedCustomers={group.customers}
-              filteredCustomers={group.customers}
-              page={0}
-              rowsPerPage={group.customers.length}
-              handleChangePage={() => {}}
-              handleChangeRowsPerPage={() => {}}
-              handleEdit={handleEdit}
-              handleDelete={handleDelete}
-              onSelectCustomer={onSelectCustomer}
-              isMobile={isMobile}
-              isTablet={isTablet}
-              isSmallDesktop={isSmallDesktop}
-              expandedRow={expandedRow}
-              toggleRowExpansion={setExpandedRow}
-              searchTerm={searchTerm}
-              hidePagination={true}
-            />
-          </Collapse>
-        </Box>
-      );
-    });
-  };
-
-  // Filter customers based on search term
-  const filteredCustomers = customers.filter(customer => {
+  const currentCustomers = activeTab === 0 ? todayCustomers : customers;
+  const filteredCustomers = currentCustomers.filter(customer => {
     if (!customer) return false;
     
     const search = searchTerm.toLowerCase();
@@ -421,58 +286,53 @@ const CustomerManagement = ({ onSelectCustomer }) => {
     );
   });
 
+  const paginatedCustomers = filteredCustomers.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+
   // Loading skeleton
   if (loading) {
     return (
-      <Box sx={{ p: isMobile ? 2 : 3 }}>
+      <Box sx={{ p: isMobile ? 1.5 : 2 }}>
         {/* Header Skeleton */}
-        <Box sx={{ mb: 4 }}>
-          <Skeleton variant="rectangular" height={40} width="60%" sx={{ mb: 1, borderRadius: 2 }} />
-          <Skeleton variant="rectangular" height={20} width="40%" sx={{ borderRadius: 1 }} />
+        <Box sx={{ mb: 2 }}>
+          <Skeleton variant="rectangular" height={36} width="50%" sx={{ mb: 0.5, borderRadius: 1 }} />
+          <Skeleton variant="rectangular" height={18} width="30%" sx={{ borderRadius: 0.5 }} />
         </Box>
         
-        {/* Total Customers Skeleton */}
-        <Box sx={{ mb: 3 }}>
-          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 3, mb: 2 }} />
-        </Box>
+        {/* Stats Card Skeletons */}
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+          {[1, 2].map((item) => (
+            <Grid item xs={6} key={item}>
+              <Skeleton variant="rectangular" height={80} sx={{ borderRadius: 1.5 }} />
+            </Grid>
+          ))}
+        </Grid>
+        
+        {/* Tabs Skeleton */}
+        <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1, mb: 2 }} />
         
         {/* Search Bar Skeleton */}
         <Skeleton 
           variant="rectangular" 
-          height={56} 
-          sx={{ borderRadius: 2, mb: 3 }}
+          height={48} 
+          sx={{ borderRadius: 1.5, mb: 2 }}
         />
         
-        {/* Date Group Skeletons */}
-        <Box sx={{ mb: 3 }}>
-          {[...Array(3)].map((_, index) => (
-            <React.Fragment key={index}>
-              <Skeleton
-                variant="rectangular"
-                height={80}
-                sx={{ 
-                  borderRadius: 2,
-                  mb: 1,
-                  width: '100%'
-                }}
-              />
-              <Box sx={{ pl: 2 }}>
-                {[...Array(2)].map((_, subIndex) => (
-                  <Skeleton
-                    key={subIndex}
-                    variant="rectangular"
-                    height={60}
-                    sx={{ 
-                      borderRadius: 2,
-                      mb: 1,
-                      width: '100%'
-                    }}
-                  />
-                ))}
-              </Box>
-            </React.Fragment>
-          ))}
-        </Box>
+        {/* Table Skeletons */}
+        {[...Array(4)].map((_, index) => (
+          <Skeleton
+            key={index}
+            variant="rectangular"
+            height={56}
+            sx={{ 
+              borderRadius: 1,
+              mb: 0.5,
+              width: '100%'
+            }}
+          />
+        ))}
       </Box>
     );
   }
@@ -480,298 +340,280 @@ const CustomerManagement = ({ onSelectCustomer }) => {
   return (
     <Fade in={!loading}>
       <Box sx={{ 
-        minHeight: '100vh',
         bgcolor: 'background.default',
-        p: isMobile ? 2 : 3,
+        p: isMobile ? 1.5 : 2,
       }}>
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
-          <Grid container alignItems="center" justifyContent="space-between" spacing={2}>
-            <Grid item xs={12} md="auto">
-              <Typography 
-                variant={isMobile ? "h5" : "h4"} 
-                fontWeight={700}
-                color="primary"
-                sx={{ 
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5
-                }}
-              >
-                <AccountIcon fontSize={isMobile ? "medium" : "large"} />
-                Customer Management
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Manage your customers - Grouped by day
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} md="auto">
-              <Box sx={{ 
-                display: 'flex', 
-                gap: isMobile ? 1 : 2,
-                flexWrap: 'wrap'
-              }}>
-                <Tooltip title="Refresh">
-                  <IconButton
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    sx={{ 
-                      bgcolor: 'background.paper',
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.primary.main, 0.04),
-                      }
-                    }}
-                  >
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-                
-                <Tooltip title="Export Data">
-                  <IconButton
-                    onClick={handleExport}
-                    sx={{ 
-                      bgcolor: 'background.paper',
-                      border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.success.main, 0.04),
-                      }
-                    }}
-                  >
-                    <ImportExportIcon />
-                  </IconButton>
-                </Tooltip>
-                
-                <Button
-                  variant="contained"
-                  startIcon={<PersonAddIcon />}
-                  onClick={() => setOpenDialog(true)}
-                  sx={{ 
-                    borderRadius: 3,
-                    px: 3,
-                    py: 1,
-                    fontWeight: 600,
-                    boxShadow: theme.shadows[3],
-                    '&:hover': {
-                      boxShadow: theme.shadows[6],
-                    }
-                  }}
-                >
-                  {isMobile ? 'Add' : 'Add Customer'}
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
+<Box sx={{ mb: 0 }}>
+  <Grid container alignItems="center" justifyContent="space-between" spacing={0.5}>
+    <Grid item xs={12} md={8}>
+      <Typography 
+        variant={isMobile ? "h6" : "h5"} 
+        fontWeight={600}
+        color="text.primary"
+        sx={{ 
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          mb: 0,
+        }}
+      >
+        <AccountIcon fontSize={isMobile ? "small" : "medium"} />
+        Customer Management
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+        Manage your customer records
+      </Typography>
+    </Grid>
+    
+    <Grid item xs={12} md={4}>
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 0.75,
+        justifyContent: isMobile ? 'flex-start' : 'flex-end',
+        mt: isMobile ? 0.5 : 0,
+      }}>
+        <Tooltip title="Refresh">
+          <IconButton
+            onClick={handleRefresh}
+            disabled={refreshing}
+            size="small"
+            sx={{ 
+              bgcolor: 'background.paper',
+              border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.04),
+              }
+            }}
+          >
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        
+        <Button
+          variant="contained"
+          size={isMobile ? "small" : "medium"}
+          color="primary"
+          startIcon={<AddIcon fontSize="small" />}
+          onClick={() => setOpenDialog(true)}
+          sx={{ 
+            borderRadius: 0.75,
+            px: 1.5,
+            py: 0.5,
+            fontWeight: 500,
+            fontSize: isMobile ? '0.75rem' : '0.8125rem',
+          }}
+        >
+          {isMobile ? 'Add' : 'Add Customer'}
+        </Button>
+      </Box>
+    </Grid>
+  </Grid>
+</Box>
 
         {/* Statistics Cards */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ 
-              borderRadius: 3,
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: theme.shadows[8],
+{/* Statistics Cards */}
+<Grid container spacing={1} sx={{ mb: 2 }}>
+  {/* Today's Customers Card */}
+  <Grid item xs={6}>
+    <Card sx={{ 
+      borderRadius: 1,
+      border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
+      bgcolor: 'background.paper',
+      height: '100%',
+      minWidth: '140px',
+    }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Avatar
+            sx={{
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              color: 'primary.main',
+              width: 32,
+              height: 32,
+              fontSize: '0.75rem',
+            }}
+          >
+            <PeopleIcon fontSize="small" />
+          </Avatar>
+          <Box>
+            <Typography variant="h6" fontWeight={700} color="text.primary" sx={{ fontSize: '1.25rem' }}>
+              {stats.today}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: '0.75rem' }}>
+              Today's Customers
+            </Typography>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  </Grid>
+  
+  {/* Today's Money Card */}
+  <Grid item xs={6}>
+    <Card sx={{ 
+      borderRadius: 1,
+      border: `1px solid ${alpha(theme.palette.success.main, 0.08)}`,
+      bgcolor: 'background.paper',
+      height: '100%',
+      minWidth: '140px',
+    }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Avatar
+            sx={{
+              bgcolor: alpha(theme.palette.success.main, 0.08),
+              color: 'success.main',
+              width: 32,
+              height: 32,
+              fontSize: '0.75rem',
+            }}
+          >
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>₦</Typography>
+          </Avatar>
+          <Box>
+            <Typography variant="h6" fontWeight={700} color="text.primary" sx={{ fontSize: '1.25rem' }}>
+              ₦{stats.todayMoney.toLocaleString('en-NG')}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, fontSize: '0.75rem' }}>
+              Today's Money
+            </Typography>
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  </Grid>
+</Grid>
+
+        {/* Tabs */}
+        <Paper sx={{ 
+          mb: 2, 
+          borderRadius: 1,
+          bgcolor: 'background.paper',
+          border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        }}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="fullWidth"
+            sx={{
+              minHeight: 40,
+              '& .MuiTab-root': {
+                minHeight: 40,
+                py: 1,
+                fontSize: '0.8125rem',
+                textTransform: 'none',
               }
-            }}>
-              <CardContent sx={{ 
-                p: isMobile ? 2 : 3,
-              }}>
-                <Typography 
-                  variant={isMobile ? "h3" : "h2"} 
-                  fontWeight={800}
-                  sx={{ 
-                    mb: 0.5,
-                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
-                  }}
-                >
-                  {stats.total}
-                </Typography>
-                <Typography 
-                  variant={isMobile ? "h6" : "h5"} 
-                  sx={{ 
-                    opacity: 0.9,
-                    fontWeight: 600,
-                  }}
-                >
-                  Total Customers
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ 
-              borderRadius: 3,
-              bgcolor: 'info.main',
-              color: 'info.contrastText',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: theme.shadows[8],
-              }
-            }}>
-              <CardContent sx={{ 
-                p: isMobile ? 2 : 3,
-              }}>
-                <Typography 
-                  variant={isMobile ? "h3" : "h2"} 
-                  fontWeight={800}
-                  sx={{ 
-                    mb: 0.5,
-                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
-                  }}
-                >
-                  {stats.today}
-                </Typography>
-                <Typography 
-                  variant={isMobile ? "h6" : "h5"} 
-                  sx={{ 
-                    opacity: 0.9,
-                    fontWeight: 600,
-                  }}
-                >
-                  Today's Customers
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={4}>
-            <Card sx={{ 
-              borderRadius: 3,
-              bgcolor: 'success.main',
-              color: 'success.contrastText',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: theme.shadows[8],
-              }
-            }}>
-              <CardContent sx={{ 
-                p: isMobile ? 2 : 3,
-              }}>
-                <Typography 
-                  variant={isMobile ? "h3" : "h2"} 
-                  fontWeight={800}
-                  sx={{ 
-                    mb: 0.5,
-                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
-                  }}
-                >
-                  {stats.yesterday}
-                </Typography>
-                <Typography 
-                  variant={isMobile ? "h6" : "h5"} 
-                  sx={{ 
-                    opacity: 0.9,
-                    fontWeight: 600,
-                  }}
-                >
-                  Yesterday's
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+            }}
+          >
+            <Tab 
+              icon={<TodayIcon fontSize="small" />} 
+              iconPosition="start"
+              label="Today's Customers" 
+              sx={{ 
+                minHeight: 40,
+                borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              }}
+            />
+            <Tab 
+              icon={<HistoryIcon fontSize="small" />} 
+              iconPosition="start"
+              label="All Customers" 
+            />
+          </Tabs>
+        </Paper>
 
         {/* Search Section */}
         <Paper 
           elevation={0}
           sx={{ 
-            p: isMobile ? 2 : 3,
-            mb: 3,
-            borderRadius: 3,
+            p: 1.5,
+            mb: 2,
+            borderRadius: 1.5,
             bgcolor: 'background.paper',
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
           }}
         >
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                placeholder="Search customers by name or phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                variant="outlined"
-                size={isMobile ? "small" : "medium"}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchTerm && (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={() => setSearchTerm('')}
-                      >
-                        <Typography variant="caption" color="textSecondary">
-                          Clear
-                        </Typography>
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                  sx: { borderRadius: 2 }
-                }}
-              />
-            </Grid>
-          </Grid>
+          <TextField
+            fullWidth
+            placeholder={activeTab === 0 ? "Search today's customers..." : "Search all customers..."}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            variant="outlined"
+            size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+              endAdornment: searchTerm && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => setSearchTerm('')}
+                    sx={{ p: 0.25 }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Clear
+                    </Typography>
+                  </IconButton>
+                </InputAdornment>
+              ),
+              sx: { 
+                borderRadius: 1,
+                fontSize: '0.875rem',
+              }
+            }}
+          />
           
           {refreshing && (
             <LinearProgress 
               sx={{ 
-                mt: 2,
-                borderRadius: 2,
-                height: 3
+                mt: 1.5,
+                borderRadius: 1,
+                height: 1.5,
+                bgcolor: 'primary.light'
               }} 
             />
           )}
         </Paper>
 
-        {/* Date Grouped Customers */}
-        {searchTerm ? (
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: 3,
-              overflow: 'hidden',
-              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-              bgcolor: 'background.paper',
+        {/* Customer Table */}
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 1.5,
+            overflow: 'hidden',
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            bgcolor: 'background.paper',
+            mb: 2,
+          }}
+        >
+          <CustomerTable
+            customers={currentCustomers}
+            paginatedCustomers={paginatedCustomers}
+            filteredCustomers={filteredCustomers}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            handleChangePage={(e, newPage) => setPage(newPage)}
+            handleChangeRowsPerPage={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
             }}
-          >
-            <CustomerTable
-              customers={customers}
-              paginatedCustomers={filteredCustomers.slice(0, rowsPerPage)}
-              filteredCustomers={filteredCustomers}
-              page={page}
-              rowsPerPage={rowsPerPage}
-              handleChangePage={(e, newPage) => setPage(newPage)}
-              handleChangeRowsPerPage={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
-              handleEdit={handleEdit}
-              handleDelete={handleDelete}
-              onSelectCustomer={onSelectCustomer}
-              isMobile={isMobile}
-              isTablet={isTablet}
-              isSmallDesktop={isSmallDesktop}
-              expandedRow={expandedRow}
-              toggleRowExpansion={setExpandedRow}
-              searchTerm={searchTerm}
-            />
-          </Paper>
-        ) : (
-          /* Date Grouped View */
-          <Box>
-            {renderDateGroups()}
-          </Box>
-        )}
+            handleEdit={handleEdit}
+            handleDelete={handleDelete}
+            onSelectCustomer={onSelectCustomer}
+            isMobile={isMobile}
+            isTablet={isTablet}
+            expandedRow={expandedRow}
+            toggleRowExpansion={setExpandedRow}
+            searchTerm={searchTerm}
+            showDateColumn={activeTab === 1}
+          />
+        </Paper>
 
-        {/* Add/Edit Customer Dialog - Responsive */}
+        {/* Add/Edit Customer Dialog */}
         <Dialog
           open={openDialog}
           onClose={handleCloseDialog}
@@ -780,36 +622,28 @@ const CustomerManagement = ({ onSelectCustomer }) => {
           fullScreen={isMobile}
           PaperProps={{
             sx: {
-              borderRadius: isMobile ? 0 : 4,
-              m: isMobile ? 0 : 4,
-              maxHeight: isMobile ? '100vh' : '90vh',
+              borderRadius: isMobile ? 0 : 1.5,
+              m: isMobile ? 0 : 1,
             }
           }}
         >
           <DialogTitle sx={{ 
-            p: isMobile ? 2 : 3, 
-            pb: isMobile ? 1 : 2,
+            p: 2, 
             borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            bgcolor: isMobile ? 'primary.main' : 'transparent',
-            color: isMobile ? 'primary.contrastText' : 'inherit',
           }}>
-            <Typography variant={isMobile ? "h6" : "h5"} fontWeight={700}>
+            <Typography variant="subtitle1" fontWeight={600}>
               {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
             </Typography>
-            {!isMobile && (
-              <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                {editingCustomer ? `Update details for ${editingCustomer.name}` : 'Enter customer details'}
-              </Typography>
-            )}
           </DialogTitle>
           
-          <DialogContent sx={{ p: isMobile ? 2 : 3 }}>
+          <DialogContent sx={{ p: 2 }}>
             {error && (
               <Alert 
                 severity="error" 
                 sx={{ 
-                  mb: 3, 
-                  borderRadius: 2,
+                  mb: 2, 
+                  borderRadius: 1,
+                  fontSize: '0.875rem',
                 }}
                 onClose={() => setError('')}
               >
@@ -825,19 +659,13 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                   value={newCustomer.name}
                   onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
                   required
-                  size={isMobile ? "small" : "medium"}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <AccountIcon color="action" />
-                      </InputAdornment>
-                    ),
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1,
+                    }
                   }}
-                  sx={{ mb: 1 }}
                 />
-                <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
-                  Required. Enter the customer's full name
-                </Typography>
               </Grid>
               
               <Grid item xs={12}>
@@ -846,50 +674,42 @@ const CustomerManagement = ({ onSelectCustomer }) => {
                   label="Phone Number"
                   value={newCustomer.phone}
                   onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  size={isMobile ? "small" : "medium"}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <PhoneIcon color="action" />
-                      </InputAdornment>
-                    ),
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1,
+                    }
                   }}
                 />
-                <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
-                  Optional. Enter phone number for contact
-                </Typography>
               </Grid>
             </Grid>
           </DialogContent>
           
           <DialogActions sx={{ 
-            p: isMobile ? 2 : 3, 
-            pt: isMobile ? 1 : 2,
+            p: 2, 
             borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            bgcolor: isMobile ? 'background.default' : 'transparent',
           }}>
             <Button
               onClick={handleCloseDialog}
+              size="small"
               sx={{ 
-                borderRadius: 2,
-                px: 3,
-                py: 1,
+                borderRadius: 1,
+                px: 2,
               }}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
+              size="small"
               onClick={handleSubmit}
               sx={{ 
-                borderRadius: 2,
-                px: 3,
-                py: 1,
-                fontWeight: 600,
+                borderRadius: 1,
+                px: 2,
+                fontWeight: 500,
               }}
-              startIcon={isMobile ? null : (editingCustomer ? <EditIcon /> : <AddIcon />)}
             >
-              {editingCustomer ? 'Update' : 'Add Customer'}
+              {editingCustomer ? 'Update' : 'Add'}
             </Button>
           </DialogActions>
         </Dialog>
@@ -897,10 +717,10 @@ const CustomerManagement = ({ onSelectCustomer }) => {
         {/* Snackbar Notifications */}
         <Snackbar
           open={snackbar.open}
-          autoHideDuration={snackbar.severity === 'warning' ? null : 6000}
+          autoHideDuration={snackbar.severity === 'warning' ? null : 4000}
           onClose={() => setSnackbar({ ...snackbar, open: false })}
           anchorOrigin={{ 
-            vertical: isMobile ? 'bottom' : 'bottom', 
+            vertical: 'bottom', 
             horizontal: isMobile ? 'center' : 'right' 
           }}
           TransitionComponent={Zoom}
@@ -911,10 +731,9 @@ const CustomerManagement = ({ onSelectCustomer }) => {
             severity={snackbar.severity}
             onClose={() => setSnackbar({ ...snackbar, open: false })}
             sx={{ 
-              borderRadius: 2,
+              borderRadius: 1,
               alignItems: 'center',
-              width: '100%',
-              maxWidth: isMobile ? '90vw' : 400,
+              fontSize: '0.875rem',
             }}
             action={snackbar.action}
           >

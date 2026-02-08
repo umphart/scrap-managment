@@ -96,8 +96,8 @@ function App() {
             borderBottom: `2px solid ${orange[500]}`,
           }}
         >
-          <Toolbar>
-            <ScrapIcon sx={{ mr: 2, fontSize: 28 }} />
+          <Toolbar sx={{ minHeight: { xs: 48, sm: 56 } }}>
+            <ScrapIcon sx={{ mr: 1.5, fontSize: { xs: 24, sm: 28 } }} />
             <Typography 
               variant="h6" 
               component="div" 
@@ -105,12 +105,13 @@ function App() {
                 flexGrow: 1,
                 fontWeight: 700,
                 letterSpacing: 0.5,
+                fontSize: { xs: '1rem', sm: '1.25rem' },
               }}
             >
               TZ Scraps Management
             </Typography>
             
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
               <Button
                 color="inherit"
                 variant={activeTab === 'customers' ? 'contained' : 'text'}
@@ -120,6 +121,9 @@ function App() {
                   '&:hover': {
                     bgcolor: activeTab === 'customers' ? 'secondary.dark' : 'rgba(255,255,255,0.1)',
                   },
+                  py: 0.5,
+                  px: 1.5,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
                 }}
               >
                 Customers
@@ -133,6 +137,9 @@ function App() {
                   '&:hover': {
                     bgcolor: activeTab === 'products' ? 'secondary.dark' : 'rgba(255,255,255,0.1)',
                   },
+                  py: 0.5,
+                  px: 1.5,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
                 }}
               >
                 Products
@@ -146,6 +153,9 @@ function App() {
                   '&:hover': {
                     bgcolor: activeTab === 'reports' ? 'secondary.dark' : 'rgba(255,255,255,0.1)',
                   },
+                  py: 0.5,
+                  px: 1.5,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
                 }}
               >
                 Reports
@@ -158,8 +168,8 @@ function App() {
           maxWidth="xl" 
           sx={{ 
             flex: 1,
-            py: 4,
-            px: { xs: 2, sm: 3, md: 4 },
+            py: 2,
+            px: { xs: 1, sm: 2, md: 3 },
           }}
         >
           {activeTab === 'customers' && !selectedCustomer && (
@@ -186,8 +196,8 @@ function App() {
         <Box
           component="footer"
           sx={{
-            py: 3,
-            px: 2,
+            py: 2,
+            px: 1,
             mt: 'auto',
             backgroundColor: 'primary.dark',
             color: 'white',
@@ -195,10 +205,15 @@ function App() {
             borderTop: `1px solid ${blue[800]}`,
           }}
         >
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             © {new Date().getFullYear()} TZ Scraps Management System v1.0
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.8, mt: 0.5, display: 'block' }}>
+          <Typography variant="caption" sx={{ 
+            opacity: 0.8, 
+            mt: 0.5, 
+            display: 'block',
+            fontSize: { xs: '0.625rem', sm: '0.75rem' }
+          }}>
             Efficient scrap management for modern businesses
           </Typography>
         </Box>

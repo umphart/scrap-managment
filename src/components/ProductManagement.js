@@ -17,8 +17,6 @@ import {
   Fade,
   Snackbar,
   Alert,
-  Card,
-  CardContent,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -26,7 +24,6 @@ import {
   Refresh as RefreshIcon,
   ImportExport as ImportExportIcon,
   Search as SearchIcon,
-  People as PeopleIcon,
 } from '@mui/icons-material';
 import { supabase } from '../config/supabase';
 import ProductList from './ProductList';
@@ -116,6 +113,7 @@ const ProductManagement = () => {
     }
 
     try {
+      // Generate serial number if creating new product
       const productData = {
         name: newProduct.name.trim(),
         description: newProduct.description?.trim() || '',
@@ -123,6 +121,9 @@ const ProductManagement = () => {
       };
 
       if (editingProduct) {
+        // For editing, use existing serial number
+        productData.serial_number = editingProduct.serial_number;
+        
         const { error } = await supabase
           .from('products')
           .update(productData)
@@ -132,6 +133,10 @@ const ProductManagement = () => {
         
         showSnackbar('Product updated successfully!', 'success');
       } else {
+        // For new products, generate a serial number
+        const serialNumber = 'PROD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        productData.serial_number = serialNumber;
+        
         const { error } = await supabase
           .from('products')
           .insert([productData]);
@@ -234,7 +239,8 @@ const ProductManagement = () => {
     return (
       product.name?.toLowerCase().includes(search) ||
       product.description?.toLowerCase().includes(search) ||
-      product.serialNumber?.toString().includes(search)
+      product.serialNumber?.toString().includes(search) ||
+      product.serial_number?.toLowerCase().includes(search)
     );
   }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -247,14 +253,9 @@ const ProductManagement = () => {
     return (
       <Box sx={{ p: isMobile ? 2 : 3 }}>
         {/* Header Skeleton */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 3 }}> {/* Reduced from mb: 4 */}
           <Skeleton variant="rectangular" height={40} width="60%" sx={{ mb: 1, borderRadius: 2 }} />
           <Skeleton variant="rectangular" height={20} width="40%" sx={{ borderRadius: 1 }} />
-        </Box>
-        
-        {/* Total Products Skeleton */}
-        <Box sx={{ mb: 3 }}>
-          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 3, mb: 2 }} />
         </Box>
         
         {/* Search Bar Skeleton */}
@@ -289,9 +290,10 @@ const ProductManagement = () => {
         minHeight: '100vh',
         bgcolor: 'background.default',
         p: isMobile ? 2 : 3,
+        pt: 2, // Added reduced top padding
       }}>
         {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 3 }}> {/* Reduced from mb: 4 */}
           <Grid container alignItems="center" justifyContent="space-between" spacing={2}>
             <Grid item xs={12} md="auto">
               <Typography 
@@ -301,13 +303,14 @@ const ProductManagement = () => {
                 sx={{ 
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 1.5
+                  gap: 1.5,
+                  mb: 0.5, // Added small bottom margin
                 }}
               >
                 <InventoryIcon fontSize={isMobile ? "medium" : "large"} />
                 Product Management
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+              <Typography variant="body1" color="text.secondary" sx={{ fontSize: '0.95rem' }}> {/* Slightly smaller font */}
                 Manage scrap products for customer transactions
               </Typography>
             </Grid>
@@ -316,7 +319,8 @@ const ProductManagement = () => {
               <Box sx={{ 
                 display: 'flex', 
                 gap: isMobile ? 1 : 2,
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
+                mt: isMobile ? 1 : 0, // Small top margin on mobile
               }}>
                 <Tooltip title="Refresh">
                   <IconButton
@@ -359,9 +363,9 @@ const ProductManagement = () => {
                     px: 3,
                     py: 1,
                     fontWeight: 600,
-                    boxShadow: theme.shadows[3],
+                    boxShadow: theme.shadows[2], // Reduced shadow
                     '&:hover': {
-                      boxShadow: theme.shadows[6],
+                      boxShadow: theme.shadows[4], // Reduced hover shadow
                     }
                   }}
                 >
@@ -372,58 +376,11 @@ const ProductManagement = () => {
           </Grid>
         </Box>
 
-        {/* Total Products Card - Simple Version */}
-        <Box sx={{ mb: 3 }}>
-          <Card sx={{ 
-            borderRadius: 3,
-            bgcolor: 'secondary.main',
-            color: 'secondary.contrastText',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-            '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: theme.shadows[8],
-            }
-          }}>
-            <CardContent sx={{ 
-              p: isMobile ? 2 : 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <Box>
-                <Typography 
-                  variant={isMobile ? "h3" : "h2"} 
-                  fontWeight={800}
-                  sx={{ 
-                    mb: 0.5,
-                    textShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.2)}`,
-                  }}
-                >
-                  {stats.total}
-                </Typography>
-                <Typography 
-                  variant={isMobile ? "h6" : "h5"} 
-                  sx={{ 
-                    opacity: 0.9,
-                    fontWeight: 600,
-                  }}
-                >
-                  Total Products
-                </Typography>
-              </Box>
-              <PeopleIcon sx={{ 
-                fontSize: isMobile ? 60 : 80,
-                opacity: 0.8,
-              }} />
-            </CardContent>
-          </Card>
-        </Box>
-
-        {/* Search Section */}
+        {/* Search Section - Moved closer to header */}
         <Paper 
           elevation={0}
           sx={{ 
-            p: isMobile ? 2 : 3,
+            p: isMobile ? 1.5 : 2.5, // Reduced padding
             mb: 3,
             borderRadius: 3,
             bgcolor: 'background.paper',
@@ -457,7 +414,10 @@ const ProductManagement = () => {
                       </IconButton>
                     </InputAdornment>
                   ),
-                  sx: { borderRadius: 2 }
+                  sx: { 
+                    borderRadius: 2,
+                    fontSize: isMobile ? '0.875rem' : '0.95rem', // Slightly smaller font
+                  }
                 }}
               />
             </Grid>
@@ -467,13 +427,18 @@ const ProductManagement = () => {
                 display: 'flex', 
                 gap: 2,
                 justifyContent: isMobile ? 'space-between' : 'flex-end',
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
+                mt: isMobile ? 1 : 0, // Small top margin on mobile
               }}>
                 <Button
                   variant="outlined"
                   onClick={() => setSearchTerm('')}
                   disabled={!searchTerm}
-                  sx={{ borderRadius: 2 }}
+                  sx={{ 
+                    borderRadius: 2,
+                    px: 2.5,
+                    py: 0.75,
+                  }}
                 >
                   Clear Search
                 </Button>
@@ -486,7 +451,7 @@ const ProductManagement = () => {
               sx={{ 
                 mt: 2,
                 borderRadius: 2,
-                height: 3,
+                height: 2, // Thinner progress bar
                 bgcolor: 'secondary.light'
               }} 
             />
@@ -494,23 +459,25 @@ const ProductManagement = () => {
         </Paper>
 
         {/* Product List Component */}
-        <ProductList
-          products={paginatedProducts}
-          filteredProducts={filteredProducts}
-          isMobile={isMobile}
-          isTablet={isTablet}
-          expandedRow={expandedRow}
-          page={page}
-          rowsPerPage={rowsPerPage}
-          searchTerm={searchTerm}
-          theme={theme}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onToggleExpand={toggleRowExpansion}
-          onChangePage={handleChangePage}
-          onChangeRowsPerPage={handleChangeRowsPerPage}
-          onAddProduct={() => setOpenDialog(true)}
-        />
+        <Box sx={{ mt: 2 }}> {/* Reduced top margin */}
+          <ProductList
+            products={paginatedProducts}
+            filteredProducts={filteredProducts}
+            isMobile={isMobile}
+            isTablet={isTablet}
+            expandedRow={expandedRow}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            searchTerm={searchTerm}
+            theme={theme}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onToggleExpand={toggleRowExpansion}
+            onChangePage={handleChangePage}
+            onChangeRowsPerPage={handleChangeRowsPerPage}
+            onAddProduct={() => setOpenDialog(true)}
+          />
+        </Box>
 
         {/* Product Form Dialog */}
         <ProductForm

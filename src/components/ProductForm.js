@@ -7,6 +7,7 @@ import {
   Button,
   TextField,
   Grid,
+  Box,
   Typography,
   Alert,
   InputAdornment,
@@ -31,6 +32,24 @@ const ProductForm = ({
   onSubmit,
   onErrorChange,
 }) => {
+  
+  // Add this function to generate serial number
+  const generateSerialNumber = () => {
+    const prefix = 'PROD-';
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `${prefix}${timestamp}-${random}`;
+  };
+
+  const handleSubmit = () => {
+    // If creating new product and no serial number, generate one
+    const productToSubmit = { ...newProduct };
+    if (!editingProduct && !productToSubmit.serial_number) {
+      productToSubmit.serial_number = generateSerialNumber();
+    }
+    onSubmit(productToSubmit);
+  };
+
   return (
     <Dialog
       open={open}
@@ -77,73 +96,69 @@ const ProductForm = ({
           </Alert>
         )}
         
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Product Name"
-              value={newProduct.name}
-              onChange={(e) => onChange({ ...newProduct, name: e.target.value })}
-              required
-              size={isMobile ? "small" : "medium"}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <InventoryIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ mb: 1 }}
-            />
-            <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
-              Required. Enter the name of the scrap product
-            </Typography>
-          </Grid>
-          
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Description"
-              multiline
-              rows={isMobile ? 3 : 4}
-              value={newProduct.description}
-              onChange={(e) => onChange({ ...newProduct, description: e.target.value })}
-              size={isMobile ? "small" : "medium"}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <DescriptionIcon color="action" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
-              Optional. Describe the scrap product details
-            </Typography>
-          </Grid>
-          
-          {editingProduct && (
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Serial Number"
-                value={newProduct.serial_number}
-                disabled
-                size={isMobile ? "small" : "medium"}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <QrCodeIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Typography variant="caption" color="textSecondary" sx={{ pl: 4 }}>
-                Auto-generated serial number
-              </Typography>
-            </Grid>
-          )}
-        </Grid>
+   <Grid container spacing={2.5}>
+  <Grid item xs={12}>
+    <Box sx={{ mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <InventoryIcon sx={{ fontSize: 18, color: 'primary.main', mr: 1 }} />
+        <Typography variant="body2" fontWeight={600} color="text.primary">
+          Product Name
+        </Typography>
+        <Typography variant="caption" color="error" sx={{ ml: 0.5 }}>
+          *
+        </Typography>
+      </Box>
+      <TextField
+        fullWidth
+        value={newProduct.name}
+        onChange={(e) => onChange({ ...newProduct, name: e.target.value })}
+        placeholder="Enter product name"
+        variant="outlined"
+        size={isMobile ? "small" : "medium"}
+        required
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            borderRadius: 1.5,
+            fontSize: isMobile ? '0.875rem' : '1rem',
+          }
+        }}
+      />
+    </Box>
+  </Grid>
+  
+  <Grid item xs={12}>
+    <Box sx={{ mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <DescriptionIcon sx={{ fontSize: 18, color: 'primary.main', mr: 1 }} />
+        <Typography variant="body2" fontWeight={600} color="text.primary">
+          Description
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+          (Optional)
+        </Typography>
+      </Box>
+      <TextField
+        fullWidth
+        multiline
+        rows={isMobile ? 2 : 3}
+        value={newProduct.description}
+        onChange={(e) => onChange({ ...newProduct, description: e.target.value })}
+        placeholder="Add product description..."
+        variant="outlined"
+        size={isMobile ? "small" : "medium"}
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            borderRadius: 1.5,
+            fontSize: isMobile ? '0.875rem' : '1rem',
+          },
+          '& .MuiOutlinedInput-inputMultiline': {
+            minHeight: isMobile ? '60px' : '70px',
+          }
+        }}
+      />
+    </Box>
+  </Grid>
+</Grid>
       </DialogContent>
       
       <DialogActions sx={{ 
@@ -162,20 +177,20 @@ const ProductForm = ({
         >
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={onSubmit}
-          sx={{ 
-            borderRadius: 2,
-            px: 3,
-            py: 1,
-            fontWeight: 600,
-          }}
-          startIcon={isMobile ? null : (editingProduct ? <EditIcon /> : <AddIcon />)}
-        >
-          {editingProduct ? 'Update' : 'Add Product'}
-        </Button>
+    <Button
+      variant="contained"
+      color="secondary"
+      onClick={handleSubmit}  // Use handleSubmit instead of onSubmit directly
+      sx={{ 
+        borderRadius: 2,
+        px: 3,
+        py: 1,
+        fontWeight: 600,
+      }}
+      startIcon={isMobile ? null : (editingProduct ? <EditIcon /> : <AddIcon />)}
+    >
+      {editingProduct ? 'Update' : 'Add Product'}
+    </Button>
       </DialogActions>
     </Dialog>
   );
