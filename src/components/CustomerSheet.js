@@ -25,8 +25,6 @@ const CustomerSheet = ({ customer, onBack }) => {
     message: '',
     severity: 'success',
   });
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [currentInvoiceTransactions, setCurrentInvoiceTransactions] = useState([]);
 
   const receiptRef = useRef();
 
@@ -37,68 +35,6 @@ const CustomerSheet = ({ customer, onBack }) => {
       severity,
     });
   }, []);
-
-  // Generate unique invoice number for each customer session
-  const generateInvoiceNumber = useCallback(async () => {
-    try {
-      // Get customer initials (max 3 characters)
-      const customerInitials = customer.name
-        .split(' ')
-        .map(word => word[0])
-        .join('')
-        .toUpperCase()
-        .replace(/[^A-Z]/g, '')
-        .slice(0, 3);
-
-      // Pad with 'X' if less than 3 characters
-      const paddedInitials = customerInitials.padEnd(3, 'X');
-
-      // Get current date in YYYYMMDD format
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-
-      // Query the last invoice number for today with this customer
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('invoice_number')
-        .eq('customer_id', customer.id)
-        .like('invoice_number', `${paddedInitials}-${dateStr}-%`)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      let sequential = 1;
-      if (data && data.length > 0) {
-        // Extract sequential number from last invoice
-        const lastInvoice = data[0].invoice_number;
-        const lastSequential = parseInt(lastInvoice.split('-').pop());
-        sequential = lastSequential + 1;
-      }
-
-      // Format: XXX-YYYYMMDD-XXX (Initials-Date-Sequential)
-      const newInvoiceNumber = `${paddedInitials}-${dateStr}-${sequential.toString().padStart(3, '0')}`;
-      setInvoiceNumber(newInvoiceNumber);
-      
-      return newInvoiceNumber;
-    } catch (error) {
-      console.error('Error generating invoice number:', error);
-      // Fallback to timestamp-based number
-      const fallbackNumber = `INV-${Date.now().toString().slice(-8)}`;
-      setInvoiceNumber(fallbackNumber);
-      return fallbackNumber;
-    }
-  }, [customer]);
-
-  // Filter transactions for current invoice
-  useEffect(() => {
-    if (transactions.length > 0 && invoiceNumber) {
-      const currentInvoice = transactions.filter(t => t.invoice_number === invoiceNumber);
-      setCurrentInvoiceTransactions(currentInvoice);
-    } else {
-      setCurrentInvoiceTransactions([]);
-    }
-  }, [transactions, invoiceNumber]);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -154,8 +90,7 @@ const CustomerSheet = ({ customer, onBack }) => {
   useEffect(() => {
     fetchTransactions();
     fetchProducts();
-    generateInvoiceNumber();
-  }, [fetchTransactions, fetchProducts, generateInvoiceNumber]);
+  }, [fetchTransactions, fetchProducts]);
 
   const handleAddProductDialogOpen = async () => {
     if (products.length === 0) {
@@ -173,7 +108,6 @@ const CustomerSheet = ({ customer, onBack }) => {
         price: parseFloat(transactionData.price),
         unit: transactionData.unit,
         total_amount: parseFloat(transactionData.total_amount),
-        invoice_number: invoiceNumber, // Assign current invoice number
       };
 
       let error;
@@ -217,12 +151,6 @@ const CustomerSheet = ({ customer, onBack }) => {
       console.error('Error:', error);
       showSnackbar('Error saving transaction. Please try again.', 'error');
     }
-  };
-
-  // Start a new invoice/session
-  const handleNewInvoice = async () => {
-    await generateInvoiceNumber();
-    showSnackbar('New invoice started!', 'success');
   };
 
   const handleDeleteTransaction = async (id) => {
@@ -283,166 +211,145 @@ const CustomerSheet = ({ customer, onBack }) => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  const generateReceiptHTML = () => {
-    const totalAmount = currentInvoiceTransactions.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
-    const currentDate = new Date();
-    
-    return `
-      <div id="receipt-content" style="font-family: 'Arial', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: white;">
-        <!-- Company Header - TASI'U ZOLA GLOBAL ENTERPRISES -->
-        <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #1a3e6f; background: linear-gradient(135deg, #1a3e6f 0%, #2a4f7f 100%); color: white; padding: 25px; border-radius: 10px 10px 0 0;">
-          <div style="font-size: 26px; font-weight: 700; margin-bottom: 5px; letter-spacing: 1px;">TASI'U ZOLA GLOBAL ENTERPRISES NIG. LTD</div>
-          <div style="font-size: 16px; opacity: 0.9; margin-bottom: 10px;">Dealers In All Kind Of Panel Such As; Phone, DVD, Laptop Etc.</div>
-          <div style="font-size: 14px; opacity: 0.8; margin-top: 10px;">
-            📞 09074444742 | 09069363200 | 08166667597
-          </div>
-        </div>
-        
-        <!-- Invoice Header with Dynamic Invoice Number -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f0f4f8; border-left: 4px solid #1a3e6f;">
-          <div>
-            <span style="background: #1a3e6f; color: white; padding: 6px 15px; border-radius: 4px; font-weight: 600; letter-spacing: 1px; font-size: 16px;">
-              CASH/SALES INVOICE
-            </span>
-            <span style="margin-left: 10px; color: #1a3e6f; font-weight: 600; font-size: 16px;">
-              #${invoiceNumber}
-            </span>
-          </div>
-          <div style="text-align: right;">
-            <div style="color: #666; font-size: 12px; margin-bottom: 4px;">DAY MONTH YEAR</div>
-            <div style="color: #1a3e6f; font-weight: 700; font-size: 18px;">${currentDate.toLocaleDateString('en-GB')}</div>
-          </div>
-        </div>
-        
-        <!-- Company Address & Customer Info -->
-        <div style="display: flex; justify-content: space-between; margin: 25px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-          <div style="flex: 1;">
-            <h3 style="color: #1a3e6f; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">HEAD OFFICE</h3>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;">Address:</span>
-              <span style="color: #333;">Kwanar Tikari Gama</span>
-            </div>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;"></span>
-              <span style="color: #333;">Nasarawa Local Government,</span>
-            </div>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;"></span>
-              <span style="color: #333;">Kano State</span>
-            </div>
-          </div>
-          
-          <div style="flex: 1;">
-            <h3 style="color: #1a3e6f; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">Customer Details</h3>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;">Name:</span>
-              <span style="color: #333;">${customer.name}</span>
-            </div>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;">Phone:</span>
-              <span style="color: #333;">${customer.phone || 'Not provided'}</span>
-            </div>
-            <div style="margin-bottom: 8px; display: flex; align-items: center;">
-              <span style="font-weight: 600; min-width: 100px; color: #555;">Customer ID:</span>
-              <span style="color: #333;">${customer.id?.slice(0, 8).toUpperCase()}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Transactions Table -->
-        <table style="width: 100%; border-collapse: collapse; margin: 25px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden;">
-          <thead>
-            <tr style="background: #1a3e6f; color: white;">
-              <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">S/N</th>
-              <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Product</th>
-              <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Price</th>
-              <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Quantity</th>
-              <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Amount (₦)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${currentInvoiceTransactions.map((t, index) => `
-              <tr style="${index % 2 === 0 ? 'background: #f8f9fa;' : ''}">
-                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${index + 1}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${t.products?.name || 'N/A'}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">₦${parseFloat(t.price || 0).toFixed(2)}/${t.unit || 'unit'}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${t.quantity} ${t.unit || 'unit'}</td>
-                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px; font-weight: bold; color: #1a3e6f;">₦${parseFloat(t.total_amount || 0).toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        
-        <!-- Total Section -->
-        <div style="text-align: right; margin-top: 30px; padding-top: 20px; border-top: 3px solid #1a3e6f;">
-          <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-            Total Items: ${currentInvoiceTransactions.length} | Total Quantity: ${currentInvoiceTransactions.reduce((sum, t) => sum + (parseFloat(t.quantity) || 0), 0)}
-          </div>
-          <div style="font-size: 24px; font-weight: bold;">
-            TOTAL AMOUNT: <span style="color: #1a3e6f; font-size: 32px; margin-left: 10px;">₦${totalAmount.toFixed(2)}</span>
-          </div>
-        </div>
-        
-        <!-- Footer -->
-        <div style="text-align: center; margin-top: 40px; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #ddd;">
-          <div style="color: #1a3e6f; font-weight: 600; margin-bottom: 15px; font-size: 14px;">Thank you for your business!</div>
-          <p style="margin-bottom: 5px;">This is a computer generated invoice - No signature required</p>
-          <p style="margin-top: 15px; color: #1a3e6f; font-size: 13px;">
-            <strong>HEAD OFFICE:</strong> Kwanar Tikari Gama, Nasarawa Local Government, Kano State
-          </p>
-          <p style="margin-top: 5px; color: #555;">
-            Contact: 09074444742 | 09069363200 | 08166667597
-          </p>
-          <p style="margin-top: 15px; font-size: 10px; color: #999;">
-            Invoice #: ${invoiceNumber} | Generated on ${currentDate.toLocaleString('en-GB')}
-          </p>
-        </div>
-        
-        <!-- Watermark -->
-        <div style="position: fixed; bottom: 30%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(26, 62, 111, 0.03); font-weight: bold; pointer-events: none; z-index: -1;">
-          TASI'U ZOLA
+ const generateReceiptHTML = () => {
+  const totalAmount = transactions.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
+  const receiptNumber = `0361-${Date.now().toString().slice(-6)}`;
+  const currentDate = new Date();
+  
+  return `
+    <div id="receipt-content" style="font-family: 'Arial', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: white;">
+      <!-- Company Header - TASI'U ZOLA GLOBAL ENTERPRISES -->
+      <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #1a3e6f; background: linear-gradient(135deg, #1a3e6f 0%, #2a4f7f 100%); color: white; padding: 25px; border-radius: 10px 10px 0 0;">
+        <div style="font-size: 26px; font-weight: 700; margin-bottom: 5px; letter-spacing: 1px;">TASI'U ZOLA GLOBAL ENTERPRISES NIG. LTD</div>
+        <div style="font-size: 16px; opacity: 0.9; margin-bottom: 10px;">Dealers In All Kind Of Panel Such As; Phone, DVD, Laptop Etc.</div>
+        <div style="font-size: 14px; opacity: 0.8; margin-top: 10px;">
+          📞 09074444742 | 09069363200 | 08166667597
         </div>
       </div>
-    `;
-  };
-
+      
+      <!-- Invoice Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f0f4f8; border-left: 4px solid #1a3e6f;">
+        <div>
+          <span style="background: #1a3e6f; color: white; padding: 6px 15px; border-radius: 4px; font-weight: 600; letter-spacing: 1px; font-size: 16px;">
+            CASH/SALES CE
+          </span>
+          <span style="margin-left: 10px; color: #1a3e6f; font-weight: 600; font-size: 16px;">
+            #0361
+          </span>
+        </div>
+        <div style="text-align: right;">
+          <div style="color: #666; font-size: 12px; margin-bottom: 4px;">DAY MONTH YEAR</div>
+          <div style="color: #1a3e6f; font-weight: 700; font-size: 18px;">${currentDate.toLocaleDateString('en-GB')}</div>
+        </div>
+      </div>
+      
+      <!-- Company Address & Customer Info -->
+      <div style="display: flex; justify-content: space-between; margin: 25px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+        <div style="flex: 1;">
+          <h3 style="color: #1a3e6f; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">HEAD OFFICE</h3>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;">Address:</span>
+            <span style="color: #333;">Kwanar Tikari Gama</span>
+          </div>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;"></span>
+            <span style="color: #333;">Nasarawa Local Government,</span>
+          </div>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;"></span>
+            <span style="color: #333;">Kano State</span>
+          </div>
+        </div>
+        
+        <div style="flex: 1;">
+          <h3 style="color: #1a3e6f; margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px;">Customer Details</h3>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;">Name:</span>
+            <span style="color: #333;">${customer.name}</span>
+          </div>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;">Phone:</span>
+            <span style="color: #333;">${customer.phone || 'Not provided'}</span>
+          </div>
+          <div style="margin-bottom: 8px; display: flex; align-items: center;">
+            <span style="font-weight: 600; min-width: 100px; color: #555;">Customer ID:</span>
+            <span style="color: #333;">${customer.id?.slice(0, 8).toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Transactions Table -->
+      <table style="width: 100%; border-collapse: collapse; margin: 25px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden;">
+        <thead>
+          <tr style="background: #1a3e6f; color: white;">
+            <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">S/N</th>
+            <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Product</th>
+            <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Price</th>
+            <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Quantity</th>
+            <th style="font-weight: 600; padding: 14px 12px; text-align: left; font-size: 14px;">Amount (₦)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${transactions.map((t, index) => `
+            <tr style="${index % 2 === 0 ? 'background: #f8f9fa;' : ''}">
+              <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${index + 1}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${t.products?.name || 'N/A'}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">₦${parseFloat(t.price || 0).toFixed(2)}/${t.unit || 'unit'}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px;">${t.quantity} ${t.unit || 'unit'}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-size: 14px; font-weight: bold; color: #1a3e6f;">₦${parseFloat(t.total_amount || 0).toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      
+      <!-- Total Section -->
+      <div style="text-align: right; margin-top: 30px; padding-top: 20px; border-top: 3px solid #1a3e6f;">
+        <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
+          Total Items: ${transactions.length} | Total Quantity: ${transactions.reduce((sum, t) => sum + (parseFloat(t.quantity) || 0), 0)}
+        </div>
+        <div style="font-size: 24px; font-weight: bold;">
+          TOTAL AMOUNT: <span style="color: #1a3e6f; font-size: 32px; margin-left: 10px;">₦${totalAmount.toFixed(2)}</span>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div style="text-align: center; margin-top: 40px; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <div style="color: #1a3e6f; font-weight: 600; margin-bottom: 15px; font-size: 14px;">Thank you for your business!</div>
+        <p style="margin-bottom: 5px;">This is a computer generated invoice - No signature required</p>
+        <p style="margin-top: 15px; color: #1a3e6f; font-size: 13px;">
+          <strong>HEAD OFFICE:</strong> Kwanar Tikari Gama, Nasarawa Local Government, Kano State
+        </p>
+        <p style="margin-top: 5px; color: #555;">
+          Contact: 09074444742 | 09069363200 | 08166667597
+        </p>
+        <p style="margin-top: 15px; font-size: 10px; color: #999;">
+          Invoice #: 0361-${Date.now().toString().slice(-6)} | Generated on ${currentDate.toLocaleString('en-GB')}
+        </p>
+      </div>
+      
+      <!-- Watermark -->
+      <div style="position: fixed; bottom: 30%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(26, 62, 111, 0.03); font-weight: bold; pointer-events: none; z-index: -1;">
+        TASI'U ZOLA
+      </div>
+    </div>
+  `;
+};
   const handlePrint = () => {
-    if (currentInvoiceTransactions.length === 0) {
+    if (transactions.length === 0) {
       showSnackbar('No transactions to print. Add products first.', 'warning');
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    const receiptHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Tasi'u Zola Global Enterprises - Invoice ${invoiceNumber}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none !important; }
-            }
-          </style>
-        </head>
-        <body>
-          ${generateReceiptHTML()}
-          <script>
-            window.onload = function() {
-              setTimeout(() => {
-                window.print();
-                setTimeout(() => {
-                  window.close();
-                }, 500);
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+  const printWindow = window.open('', '_blank');
+const receiptHTML = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <title>Tasi'u Zola Global Enterprises - Invoice ${customer.name}</title>
+      <!-- rest of the code -->
+    </head>
+  </html>
+`;
     
     printWindow.document.write(receiptHTML);
     printWindow.document.close();
@@ -450,7 +357,7 @@ const CustomerSheet = ({ customer, onBack }) => {
   };
 
   const generatePDF = async () => {
-    if (currentInvoiceTransactions.length === 0) {
+    if (transactions.length === 0) {
       showSnackbar('No transactions to download. Add products first.', 'warning');
       return;
     }
@@ -501,7 +408,8 @@ const CustomerSheet = ({ customer, onBack }) => {
         pdf.text(`Page ${i} of ${pageCount}`, pdfWidth - 30, pdfHeight - 10);
       }
 
-      const fileName = `Tasiu_Zola_Invoice_${customer.name.replace(/\s+/g, '_')}_${invoiceNumber.replace(/-/g, '_')}.pdf`;
+      const receiptNumber = `TZ-${Date.now().toString().slice(-8)}`;
+      const fileName = `Tasiu_Zola_Invoice_${customer.name.replace(/\s+/g, '_')}_${receiptNumber}.pdf`;
       
       pdf.save(fileName);
       showSnackbar('PDF downloaded successfully!', 'success');
@@ -527,11 +435,11 @@ const CustomerSheet = ({ customer, onBack }) => {
     }, 2000);
   };
 
-  const totalAmount = currentInvoiceTransactions.reduce((sum, transaction) => 
+  const totalAmount = transactions.reduce((sum, transaction) => 
     sum + (parseFloat(transaction.total_amount) || 0), 0
   );
 
-  const totalItems = currentInvoiceTransactions.reduce((sum, transaction) => 
+  const totalItems = transactions.reduce((sum, transaction) => 
     sum + (parseFloat(transaction.quantity) || 0), 0
   );
 
@@ -551,7 +459,7 @@ const CustomerSheet = ({ customer, onBack }) => {
   return (
     <Box sx={{ 
       p: isMobile ? 2 : 3,
-      height: 'calc(100vh - 64px)',
+      height: 'calc(100vh - 64px)', // Full height minus header
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
@@ -563,14 +471,12 @@ const CustomerSheet = ({ customer, onBack }) => {
           onBack={onBack}
           onPrint={handlePrint}
           onAddProduct={handleAddProductDialogOpen}
-          transactions={currentInvoiceTransactions}
+          transactions={transactions}
           onDownload={generatePDF}
           onPrintAndDownload={handlePrintAndPDF}
-          onNewInvoice={handleNewInvoice}
           anchorEl={anchorEl}
           onMenuOpen={handleMenuOpen}
           onMenuClose={handleMenuClose}
-          invoiceNumber={invoiceNumber}
         />
       </Box>
 
@@ -602,7 +508,7 @@ const CustomerSheet = ({ customer, onBack }) => {
               flexDirection: 'column'
             }}>
               <TransactionTable
-                transactions={currentInvoiceTransactions}
+                transactions={transactions}
                 onDeleteTransaction={handleDeleteTransaction}
                 onEditTransaction={handleEditTransaction}
                 loading={loading}
@@ -617,13 +523,12 @@ const CustomerSheet = ({ customer, onBack }) => {
               flexDirection: 'column'
             }}>
               <SummaryPanel
-                transactions={currentInvoiceTransactions}
+                transactions={transactions}
                 totalAmount={totalAmount}
                 totalItems={totalItems}
                 onDownload={generatePDF}
                 onPrint={handlePrint}
                 onPrintAndDownload={handlePrintAndPDF}
-                invoiceNumber={invoiceNumber}
               />
             </Box>
           </Grid>
@@ -648,7 +553,7 @@ const CustomerSheet = ({ customer, onBack }) => {
       {/* Hidden receipt for PDF generation */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
         <div ref={receiptRef} id="receipt-pdf">
-          {currentInvoiceTransactions.length > 0 && (
+          {transactions.length > 0 && (
             <div dangerouslySetInnerHTML={{ __html: generateReceiptHTML() }} />
           )}
         </div>
