@@ -213,7 +213,7 @@ const CustomerSheet = ({ customer, onBack }) => {
 
  const generateReceiptHTML = () => {
   const totalAmount = transactions.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
-  const receiptNumber = `0361-${Date.now().toString().slice(-6)}`;
+
   const currentDate = new Date();
   
   return `
@@ -231,11 +231,9 @@ const CustomerSheet = ({ customer, onBack }) => {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f0f4f8; border-left: 4px solid #1a3e6f;">
         <div>
           <span style="background: #1a3e6f; color: white; padding: 6px 15px; border-radius: 4px; font-weight: 600; letter-spacing: 1px; font-size: 16px;">
-            CASH/SALES CE
+            CASH/SALES INVOICE
           </span>
-          <span style="margin-left: 10px; color: #1a3e6f; font-weight: 600; font-size: 16px;">
-            #0361
-          </span>
+  
         </div>
         <div style="text-align: right;">
           <div style="color: #666; font-size: 12px; margin-bottom: 4px;">DAY MONTH YEAR</div>
@@ -323,7 +321,7 @@ const CustomerSheet = ({ customer, onBack }) => {
           Contact: 09074444742 | 09069363200 | 08166667597
         </p>
         <p style="margin-top: 15px; font-size: 10px; color: #999;">
-          Invoice #: 0361-${Date.now().toString().slice(-6)} | Generated on ${currentDate.toLocaleString('en-GB')}
+          Invoice #: 0-${Date.now().toString().slice(-6)} | Generated on ${currentDate.toLocaleString('en-GB')}
         </p>
       </div>
       
@@ -340,16 +338,37 @@ const CustomerSheet = ({ customer, onBack }) => {
       return;
     }
 
-  const printWindow = window.open('', '_blank');
-const receiptHTML = `
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <title>Tasi'u Zola Global Enterprises - Invoice ${customer.name}</title>
-      <!-- rest of the code -->
-    </head>
-  </html>
-`;
+    const printWindow = window.open('', '_blank');
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Tasi'u Zola Global Enterprises - Invoice ${customer.name}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Roboto', Arial, sans-serif; padding: 20px; }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          ${generateReceiptHTML()}
+          <script>
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+                setTimeout(() => {
+                  window.close();
+                }, 500);
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
     
     printWindow.document.write(receiptHTML);
     printWindow.document.close();
