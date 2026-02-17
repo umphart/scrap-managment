@@ -14,15 +14,19 @@ import {
   TextField,
   Alert,
   CircularProgress,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import { blue, orange } from '@mui/material/colors';
 import ScrapIcon from '@mui/icons-material/Recycling';
 import LockIcon from '@mui/icons-material/Lock';
 import PersonIcon from '@mui/icons-material/Person';
+import EmailIcon from '@mui/icons-material/Email';
 import CustomerManagement from './components/CustomerManagement';
 import ProductManagement from './components/ProductManagement';
 import CustomerSheet from './components/CustomerSheet';
 import Reports from './components/Reports';
+import { supabase } from './config/supabase';
 
 // Create a simple theme first to avoid dependency issues
 const theme = createTheme({
@@ -79,47 +83,130 @@ const theme = createTheme({
   },
 });
 
-// Mock user credentials (in a real app, this would come from a backend)
-const VALID_CREDENTIALS = {
-  username: 'Tasizola',
-  password: '123456'
-};
-
-function LoginPage({ onLogin }) {
-  const [username, setUsername] = useState('');
+function AuthPage({ onLogin }) {
+  const [activeTab, setActiveTab] = useState(0); // 0 for login, 1 for signup
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    setError('');
+    setSuccess('');
+    // Reset form fields
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setUsername('');
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     
-    if (!username.trim() || !password.trim()) {
-      setError('Please enter both username and password');
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
       return;
     }
 
     setLoading(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      if (username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password) {
-        // Store login state in localStorage
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Store user info in localStorage
         localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('username', username);
+        localStorage.setItem('userEmail', data.user.email);
+        localStorage.setItem('userId', data.user.id);
+        
+        // Get username from user metadata or email
+        const userName = data.user.user_metadata?.username || data.user.email?.split('@')[0];
+        localStorage.setItem('username', userName);
+        
         onLogin();
-      } else {
-        setError('Invalid username or password');
       }
+    } catch (error) {
+      setError(error.message);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    
+    // Validation
+    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password.trim(),
+        options: {
+          data: {
+            username: username.trim() || email.split('@')[0],
+          },
+          // Disable email verification
+          emailRedirectTo: undefined,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Auto-confirm the email (since we're not using email verification)
+        // Note: This depends on your Supabase settings
+        setSuccess('Account created successfully! You can now log in.');
+        
+        // Auto switch to login tab after successful signup
+        setTimeout(() => {
+          setActiveTab(0);
+          setPassword('');
+          setConfirmPassword('');
+        }, 2000);
+      }
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Handle Enter key press
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
-      handleSubmit(e);
+      if (activeTab === 0) {
+        handleLogin(e);
+      } else {
+        handleSignUp(e);
+      }
     }
   };
 
@@ -189,17 +276,23 @@ function LoginPage({ onLogin }) {
             </Box>
           </Box>
 
-          <Typography
-            variant="h5"
-            sx={{
-              mb: 1,
-              fontWeight: 600,
-              color: 'primary.dark',
-              fontSize: { xs: '1.25rem', sm: '1.5rem' },
+          {/* Auth Tabs */}
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange} 
+            sx={{ 
+              width: '100%',
+              mb: 2,
+              '& .MuiTab-root': {
+                fontSize: '1rem',
+                fontWeight: 600,
+                flex: 1,
+              },
             }}
           >
-            Sign In
-          </Typography>
+            <Tab label="Sign In" />
+            <Tab label="Create Account" />
+          </Tabs>
 
           {/* Error Alert */}
           {error && (
@@ -217,10 +310,26 @@ function LoginPage({ onLogin }) {
             </Alert>
           )}
 
-          {/* Login Form */}
+          {/* Success Alert */}
+          {success && (
+            <Alert
+              severity="success"
+              sx={{
+                width: '100%',
+                mb: 2,
+                '& .MuiAlert-icon': {
+                  alignItems: 'center',
+                },
+              }}
+            >
+              {success}
+            </Alert>
+          )}
+
+          {/* Auth Form */}
           <Box
             component="form"
-            onSubmit={handleSubmit}
+            onSubmit={activeTab === 0 ? handleLogin : handleSignUp}
             sx={{
               width: '100%',
               display: 'flex',
@@ -228,16 +337,35 @@ function LoginPage({ onLogin }) {
               gap: 2.5,
             }}
           >
+            {/* Username field for signup only */}
+            {activeTab === 1 && (
+              <TextField
+                fullWidth
+                label="Username (optional)"
+                variant="outlined"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyPress={handleKeyPress}
+                InputProps={{
+                  startAdornment: (
+                    <PersonIcon sx={{ mr: 1, color: 'action.active' }} />
+                  ),
+                }}
+                disabled={loading}
+              />
+            )}
+
             <TextField
               fullWidth
-              label="Username"
+              label="Email"
+              type="email"
               variant="outlined"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               onKeyPress={handleKeyPress}
               InputProps={{
                 startAdornment: (
-                  <PersonIcon sx={{ mr: 1, color: 'action.active' }} />
+                  <EmailIcon sx={{ mr: 1, color: 'action.active' }} />
                 ),
               }}
               disabled={loading}
@@ -264,6 +392,7 @@ function LoginPage({ onLogin }) {
                 ),
               }}
               disabled={loading}
+              helperText={activeTab === 1 ? "Minimum 6 characters" : ""}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   '&:hover fieldset': {
@@ -273,25 +402,24 @@ function LoginPage({ onLogin }) {
               }}
             />
 
-            {/* Demo Credentials */}
-            <Alert
-              severity="info"
-              sx={{
-                fontSize: '0.875rem',
-                '& .MuiAlert-icon': {
-                  alignItems: 'center',
-                },
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                Demo Credentials:
-              </Typography>
-              <Typography variant="body2">
-                Username: <strong>Tasizola</strong>
-                <br />
-                Password: <strong>123456</strong>
-              </Typography>
-            </Alert>
+            {/* Confirm Password for signup */}
+            {activeTab === 1 && (
+              <TextField
+                fullWidth
+                label="Confirm Password"
+                type="password"
+                variant="outlined"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyPress={handleKeyPress}
+                InputProps={{
+                  startAdornment: (
+                    <LockIcon sx={{ mr: 1, color: 'action.active' }} />
+                  ),
+                }}
+                disabled={loading}
+              />
+            )}
 
             <Button
               type="submit"
@@ -316,7 +444,7 @@ function LoginPage({ onLogin }) {
               {loading ? (
                 <CircularProgress size={24} sx={{ color: 'white' }} />
               ) : (
-                'Sign In'
+                activeTab === 0 ? 'Sign In' : 'Create Account'
               )}
             </Button>
           </Box>
@@ -353,6 +481,13 @@ function LoginPage({ onLogin }) {
 function MainApp() {
   const [activeTab, setActiveTab] = useState('customers');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [userEmail, setUserEmail] = useState('');
+
+  useEffect(() => {
+    // Get user email from localStorage
+    const email = localStorage.getItem('userEmail') || '';
+    setUserEmail(email);
+  }, []);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -361,10 +496,18 @@ function MainApp() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('username');
-    window.location.reload(); // Reload to show login page
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userEmail');
+      localStorage.removeItem('userId');
+      localStorage.removeItem('username');
+      window.location.reload(); // Reload to show login page
+    }
   };
 
   return (
@@ -444,23 +587,45 @@ function MainApp() {
                 Reports
               </Button>
               
-              {/* Logout Button */}
-              <Button
-                color="inherit"
-                onClick={handleLogout}
-                sx={{
-                  ml: 2,
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  '&:hover': {
-                    bgcolor: 'rgba(255,255,255,0.1)',
-                  },
-                  py: 0.5,
-                  px: 1.5,
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                }}
-              >
-                Logout
-              </Button>
+              {/* User Email and Logout */}
+              <Box sx={{ 
+                ml: 2, 
+                display: { xs: 'none', md: 'flex' }, 
+                alignItems: 'center',
+                borderLeft: '1px solid rgba(255,255,255,0.3)',
+                pl: 2,
+              }}>
+                <Typography variant="body2" sx={{ mr: 2, fontSize: '0.875rem' }}>
+                  {userEmail}
+                </Typography>
+                <Button
+                  color="inherit"
+                  onClick={handleLogout}
+                  sx={{
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.1)',
+                    },
+                    py: 0.5,
+                    px: 1.5,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  }}
+                >
+                  Logout
+                </Button>
+              </Box>
+
+              {/* Mobile Logout */}
+              <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+                <IconButton
+                  color="inherit"
+                  onClick={handleLogout}
+                  size="small"
+                  sx={{ ml: 1 }}
+                >
+                  <LockIcon fontSize="small" />
+                </IconButton>
+              </Box>
             </Box>
           </Toolbar>
         </AppBar>
@@ -508,7 +673,7 @@ function MainApp() {
         >
           <Typography variant="body2" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             © {new Date().getFullYear()} TZ Scraps Management System v1.0
-            {localStorage.getItem('username') && ` • Logged in as: ${localStorage.getItem('username')}`}
+            {localStorage.getItem('userEmail') && ` • ${localStorage.getItem('userEmail')}`}
           </Typography>
           <Typography variant="caption" sx={{ 
             opacity: 0.8, 
@@ -529,13 +694,48 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already authenticated
-    const authStatus = localStorage.getItem('isAuthenticated');
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-    }
-    setLoading(false);
+    checkUser();
+    
+    // Subscribe to auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        setIsAuthenticated(true);
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
+
+  const checkUser = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userEmail', session.user.email);
+        localStorage.setItem('userId', session.user.id);
+        
+        const userName = session.user.user_metadata?.username || session.user.email?.split('@')[0];
+        localStorage.setItem('username', userName);
+        
+        setIsAuthenticated(true);
+      } else {
+        // Check local storage fallback
+        const authStatus = localStorage.getItem('isAuthenticated');
+        if (authStatus === 'true') {
+          setIsAuthenticated(true);
+        }
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -560,7 +760,7 @@ function App() {
     );
   }
 
-  return isAuthenticated ? <MainApp /> : <LoginPage onLogin={handleLogin} />;
+  return isAuthenticated ? <MainApp /> : <AuthPage onLogin={handleLogin} />;
 }
 
 export default App;
