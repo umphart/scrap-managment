@@ -211,7 +211,7 @@ const CustomerSheet = ({ customer, onBack }) => {
     setSnackbar({ ...snackbar, open: false });
   };
 
- const generateReceiptHTML = () => {
+const generateReceiptHTML = () => {
   const totalAmount = transactions.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
 
   const currentDate = new Date();
@@ -233,11 +233,20 @@ const CustomerSheet = ({ customer, onBack }) => {
           <span style="background: #1a3e6f; color: white; padding: 6px 15px; border-radius: 4px; font-weight: 600; letter-spacing: 1px; font-size: 16px;">
             CASH/SALES INVOICE
           </span>
-  
         </div>
         <div style="text-align: right;">
           <div style="color: #666; font-size: 12px; margin-bottom: 4px;">DAY MONTH YEAR</div>
           <div style="color: #1a3e6f; font-weight: 700; font-size: 18px;">${currentDate.toLocaleDateString('en-GB')}</div>
+        </div>
+      </div>
+      
+      <!-- Total Section - Moved here after Invoice Header -->
+      <div style="text-align: right; margin-bottom: 25px; padding: 15px 20px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border-left: 4px solid #1a3e6f;">
+        <div style="margin-bottom: 8px; font-size: 14px; color: #495057;">
+          Total Items: ${transactions.length} | Total Quantity: ${transactions.reduce((sum, t) => sum + (parseFloat(t.quantity) || 0), 0)}
+        </div>
+        <div style="font-size: 24px; font-weight: bold; color: #212529;">
+          TOTAL AMOUNT: <span style="color: #1a3e6f; font-size: 32px; margin-left: 10px; font-weight: 800;">₦${totalAmount.toFixed(2)}</span>
         </div>
       </div>
       
@@ -299,16 +308,6 @@ const CustomerSheet = ({ customer, onBack }) => {
           `).join('')}
         </tbody>
       </table>
-      
-      <!-- Total Section -->
-      <div style="text-align: right; margin-top: 30px; padding-top: 20px; border-top: 3px solid #1a3e6f;">
-        <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-          Total Items: ${transactions.length} | Total Quantity: ${transactions.reduce((sum, t) => sum + (parseFloat(t.quantity) || 0), 0)}
-        </div>
-        <div style="font-size: 24px; font-weight: bold;">
-          TOTAL AMOUNT: <span style="color: #1a3e6f; font-size: 32px; margin-left: 10px;">₦${totalAmount.toFixed(2)}</span>
-        </div>
-      </div>
       
       <!-- Footer -->
       <div style="text-align: center; margin-top: 40px; color: #666; font-size: 12px; padding-top: 20px; border-top: 1px solid #ddd;">
